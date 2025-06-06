@@ -13,7 +13,14 @@
             extend: {
                 colors: {
                     primary: '#000000',
-                    secondary: '#666666'
+                    secondary: '#666666',
+                    tag: {
+                        type: '#3b82f6',       // Azul
+                        priority: '#f59e0b',    // Amarillo/Naranja
+                        status: '#10b981',      // Verde
+                        relation: '#8b5cf6',    // Morado
+                        default: '#6b7280'      // Gris
+                    }
                 }
             }
         }
@@ -39,6 +46,46 @@
         border-left: 2px solid #e5e7eb;
         margin-left: 8px;
         padding-left: 12px;
+    }
+    .tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        margin-right: 4px;
+        margin-bottom: 4px;
+        white-space: nowrap;
+    }
+    .tag-type {
+        background-color: rgba(59, 130, 246, 0.1);
+        color: #3b82f6;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+    .tag-priority {
+        background-color: rgba(245, 158, 11, 0.1);
+        color: #f59e0b;
+        border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+    .tag-status {
+        background-color: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    .tag-relation {
+        background-color: rgba(139, 92, 246, 0.1);
+        color: #8b5cf6;
+        border: 1px solid rgba(139, 92, 246, 0.2);
+        cursor: pointer;
+    }
+    .tag-default {
+        background-color: rgba(107, 114, 128, 0.1);
+        color: #6b7280;
+        border: 1px solid rgba(107, 114, 128, 0.2);
+    }
+    .tag-relation:hover {
+        background-color: rgba(139, 92, 246, 0.2);
     }
 </style>
 </head>
@@ -168,6 +215,7 @@
                             :node="selectedNode" 
                             :path="selectedPath"
                             @select="selectNode"
+                            @navigate-relation="navigateToRelation"
                         ></content-viewer>
                     </div>
                     <div v-else class="text-center py-12 text-gray-500">
@@ -459,7 +507,7 @@
     const ContentViewer = {
         name: 'ContentViewer',
         props: ['node', 'path'],
-        emits: ['select'],
+        emits: ['select', 'navigate-relation'],
         computed: {
             isObject() {
                 return typeof this.node === 'object' && this.node !== null && !Array.isArray(this.node);
@@ -575,9 +623,69 @@
                 }
                 
                 return branches;
+            },
+            hasTags() {
+                return this.isObject && this.node.tags && typeof this.node.tags === 'string';
+            },
+            parsedTags() {
+                if (!this.hasTags) return [];
+                
+                return this.parseTags(this.node.tags);
             }
         },
         methods: {
+            parseTags(tagsString) {
+                if (!tagsString) return [];
+                
+                // Split by commas and trim each tag
+                const tagStrings = tagsString.split(',').map(tag => tag.trim());
+                
+                // Parse each tag into an object with type and value
+                return tagStrings.map(tag => {
+                    // Check if tag follows the tipo::valor format
+                    const match = tag.match(/^([^:]+)::(.+)$/);
+                    
+                    if (match) {
+                        const type = match[1].trim();
+                        const value = match[2].trim();
+                        
+                        // Check if it's a relation tag with the format relation::tipo>>elemento_referenciado
+                        if (type === 'relation') {
+                            const relationMatch = value.match(/^([^>]+)>>(.+)$/);
+                            if (relationMatch) {
+                                return {
+                                    type: 'relation',
+                                    relationType: relationMatch[1].trim(),
+                                    target: relationMatch[2].trim(),
+                                    full: tag
+                                };
+                            }
+                        }
+                        
+                        return {
+                            type,
+                            value,
+                            full: tag
+                        };
+                    }
+                    
+                    // If tag doesn't follow the format, return it as is with default type
+                    return {
+                        type: 'default',
+                        value: tag,
+                        full: tag
+                    };
+                });
+            },
+            getTagClass(tag) {
+                const validTypes = ['type', 'priority', 'status', 'relation'];
+                return validTypes.includes(tag.type) ? `tag-${tag.type}` : 'tag-default';
+            },
+            handleRelationClick(tag) {
+                if (tag.type === 'relation' && tag.target) {
+                    this.$emit('navigate-relation', tag.target);
+                }
+            },
             getChildCount(node) {
                 if (!node || typeof node !== 'object') return 0;
                 
@@ -695,6 +803,26 @@
                     </span>
                 </div>
 
+                <!-- Tags Section -->
+                <div v-if="hasTags" class="space-y-2">
+                    <h3 class="text-md font-medium text-gray-900">Tags</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <span 
+                            v-for="(tag, index) in parsedTags" 
+                            :key="index"
+                            :class="['tag', getTagClass(tag)]"
+                            @click="tag.type === 'relation' && handleRelationClick(tag)"
+                        >
+                            <span v-if="tag.type === 'relation'">
+                                {{ tag.relationType }} » {{ tag.target }}
+                            </span>
+                            <span v-else>
+                                {{ tag.type }}::{{ tag.value }}
+                            </span>
+                        </span>
+                    </div>
+                </div>
+
                 <!-- Leaf Nodes Section -->
                 <div v-if="leafNodes.length > 0" class="space-y-4">
                     <h3 v-if="nonLeafNodes.length > 0" class="text-md font-medium text-gray-900">Properties</h3>
@@ -709,8 +837,25 @@
                                 
                                 <!-- String Content -->
                                 <div v-if="typeof leaf.value === 'string'">
+                                    <!-- Tags -->
+                                    <div v-if="leaf.key === 'tags'" class="flex flex-wrap gap-2">
+                                        <span 
+                                            v-for="(tag, tagIndex) in parseTags(leaf.value)" 
+                                            :key="tagIndex"
+                                            :class="['tag', getTagClass(tag)]"
+                                            @click="tag.type === 'relation' && handleRelationClick(tag)"
+                                        >
+                                            <span v-if="tag.type === 'relation'">
+                                                {{ tag.relationType }} » {{ tag.target }}
+                                            </span>
+                                            <span v-else>
+                                                {{ tag.type }}::{{ tag.value }}
+                                            </span>
+                                        </span>
+                                    </div>
+                                    
                                     <!-- Date -->
-                                    <div v-if="isDate(leaf.value)" class="flex items-center space-x-3">
+                                    <div v-else-if="isDate(leaf.value)" class="flex items-center space-x-3">
                                         <i data-lucide="calendar" class="w-4 h-4 text-gray-700"></i>
                                         <div>
                                             <div class="font-medium">{{ formatDate(leaf.value) }}</div>
@@ -785,6 +930,22 @@
                                 </div>
                                 <span v-if="branch.caption" class="text-xs text-gray-500">
                                     ({{ branch.caption }})
+                                </span>
+                            </div>
+                            
+                            <!-- Show tags if present -->
+                            <div v-if="branch.value && branch.value.tags" class="mt-2 flex flex-wrap gap-1">
+                                <span 
+                                    v-for="(tag, tagIndex) in parseTags(branch.value.tags)" 
+                                    :key="tagIndex"
+                                    :class="['tag text-xs py-0.5 px-2', getTagClass(tag)]"
+                                >
+                                    <span v-if="tag.type === 'relation'">
+                                        {{ tag.relationType }}»{{ tag.target }}
+                                    </span>
+                                    <span v-else>
+                                        {{ tag.value }}
+                                    </span>
                                 </span>
                             </div>
                         </div>
@@ -952,6 +1113,38 @@
                 
                 return '';
             },
+            navigateToRelation(targetName) {
+                // This function will search for a node with the given title/name
+                // and navigate to it if found
+                this.findNodeByTitle(this.jsonData, [], targetName);
+            },
+            findNodeByTitle(node, path, targetName) {
+                if (!node || typeof node !== 'object') return false;
+                
+                // Check if current node has a title/name that matches
+                if (typeof node === 'object' && !Array.isArray(node)) {
+                    const title = node.title || node.name;
+                    if (title === targetName) {
+                        this.selectNode(node, path);
+                        return true;
+                    }
+                }
+                
+                // Recursively search in children
+                if (Array.isArray(node)) {
+                    for (let i = 0; i < node.length; i++) {
+                        const found = this.findNodeByTitle(node[i], [...path, i], targetName);
+                        if (found) return true;
+                    }
+                } else if (typeof node === 'object' && node !== null) {
+                    for (const [key, value] of Object.entries(node)) {
+                        const found = this.findNodeByTitle(value, [...path, key], targetName);
+                        if (found) return true;
+                    }
+                }
+                
+                return false;
+            },
             exportCurrentNode(format) {
                 if (!this.selectedNode) return;
                 
@@ -981,6 +1174,11 @@
                 if (typeof level === 'undefined') level = 1;
                 let content = '#'.repeat(level) + ' ' + title + '\n\n';
                 
+                // Add tags if present
+                if (node && typeof node === 'object' && !Array.isArray(node) && node.tags) {
+                    content += '**Tags:** ' + node.tags + '\n\n';
+                }
+                
                 if (typeof node === 'object' && node !== null) {
                     if (Array.isArray(node)) {
                         node.forEach((item, index) => {
@@ -989,8 +1187,10 @@
                         });
                     } else {
                         Object.entries(node).forEach(([key, value]) => {
-                            content += '#'.repeat(level + 1) + ' ' + key + '\n\n';
-                            content += this.formatValueForMarkdown(value) + '\n\n';
+                            if (key !== 'tags') { // Skip tags as we've already added them
+                                content += '#'.repeat(level + 1) + ' ' + key + '\n\n';
+                                content += this.formatValueForMarkdown(value) + '\n\n';
+                            }
                         });
                     }
                 } else {
@@ -1000,7 +1200,7 @@
                 return content;
             },
             generateHTML(node, title, path) {
-                let content = '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>' + title + '</title>\n    <style>\n        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }\n        h1, h2, h3, h4, h5, h6 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; }\n        .value { background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 10px 0; }\n        .date { color: #333; }\n        .number { color: #333; font-weight: bold; }\n        .boolean { color: #333; font-weight: bold; }\n    </style>\n</head>\n<body>';
+                let content = '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>' + title + '</title>\n    <style>\n        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }\n        h1, h2, h3, h4, h5, h6 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; }\n        .value { background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 10px 0; }\n        .date { color: #333; }\n        .number { color: #333; font-weight: bold; }\n        .boolean { color: #333; font-weight: bold; }\n        .tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-right: 4px; }\n        .tag-type { background-color: #e6f0ff; color: #3b82f6; }\n        .tag-priority { background-color: #fff7e6; color: #f59e0b; }\n        .tag-status { background-color: #e6fff0; color: #10b981; }\n        .tag-relation { background-color: #f0e6ff; color: #8b5cf6; }\n        .tag-default { background-color: #f2f2f2; color: #6b7280; }\n    </style>\n</head>\n<body>';
                 
                 content += this.generateHTMLContent(node, title, 1);
                 content += '</body></html>';
@@ -1010,6 +1210,23 @@
             generateHTMLContent(node, title, level) {
                 let content = '<h' + level + ' id="' + this.slugify(title) + '">' + title + '</h' + level + '>';
                 
+                // Add tags if present
+                if (node && typeof node === 'object' && !Array.isArray(node) && node.tags) {
+                    content += '<div class="tags">';
+                    const tags = this.parseTags(node.tags);
+                    tags.forEach(tag => {
+                        const tagClass = this.getTagClass(tag);
+                        content += `<span class="tag ${tagClass}">`;
+                        if (tag.type === 'relation') {
+                            content += `${tag.relationType} » ${tag.target}`;
+                        } else {
+                            content += `${tag.type}::${tag.value}`;
+                        }
+                        content += '</span>';
+                    });
+                    content += '</div>';
+                }
+                
                 if (typeof node === 'object' && node !== null) {
                     if (Array.isArray(node)) {
                         node.forEach((item, index) => {
@@ -1018,7 +1235,9 @@
                         });
                     } else {
                         Object.entries(node).forEach(([key, value]) => {
-                            content += this.generateHTMLContent(value, key, level + 1);
+                            if (key !== 'tags') { // Skip tags as we've already added them
+                                content += this.generateHTMLContent(value, key, level + 1);
+                            }
                         });
                     }
                 } else {
@@ -1026,6 +1245,53 @@
                 }
                 
                 return content;
+            },
+            parseTags(tagsString) {
+                if (!tagsString) return [];
+                
+                // Split by commas and trim each tag
+                const tagStrings = tagsString.split(',').map(tag => tag.trim());
+                
+                // Parse each tag into an object with type and value
+                return tagStrings.map(tag => {
+                    // Check if tag follows the tipo::valor format
+                    const match = tag.match(/^([^:]+)::(.+)$/);
+                    
+                    if (match) {
+                        const type = match[1].trim();
+                        const value = match[2].trim();
+                        
+                        // Check if it's a relation tag with the format relation::tipo>>elemento_referenciado
+                        if (type === 'relation') {
+                            const relationMatch = value.match(/^([^>]+)>>(.+)$/);
+                            if (relationMatch) {
+                                return {
+                                    type: 'relation',
+                                    relationType: relationMatch[1].trim(),
+                                    target: relationMatch[2].trim(),
+                                    full: tag
+                                };
+                            }
+                        }
+                        
+                        return {
+                            type,
+                            value,
+                            full: tag
+                        };
+                    }
+                    
+                    // If tag doesn't follow the format, return it as is with default type
+                    return {
+                        type: 'default',
+                        value: tag,
+                        full: tag
+                    };
+                });
+            },
+            getTagClass(tag) {
+                const validTypes = ['type', 'priority', 'status', 'relation'];
+                return validTypes.includes(tag.type) ? `tag-${tag.type}` : 'tag-default';
             },
             formatValueForMarkdown(value) {
                 if (typeof value === 'string') {
