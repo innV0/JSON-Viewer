@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Explorer</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    primary: '#000000',
+                    secondary: '#666666'
+                }
+            }
+        }
+    }
+</script>
+<style>
+    [v-cloak] { display: none; }
+    .tree-node {
+        transition: all 0.2s ease;
+    }
+    .tree-node:hover {
+        background-color: #f5f5f5;
+    }
+    .breadcrumb-arrow::after {
+        content: '›';
+        margin: 0 8px;
+        color: #666666;
+    }
+    .breadcrumb-arrow:last-child::after {
+        display: none;
+    }
+    .array-item {
+        border-left: 2px solid #e5e7eb;
+        margin-left: 8px;
+        padding-left: 12px;
+    }
+</style>
+</head>
+<body class="bg-white">
+<div id="app" v-cloak>
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
+                        <i data-lucide="file-json" class="w-5 h-5 text-white"></i>
+                    </div>
+                    <h1 class="text-xl font-semibold text-gray-900">JSON Explorer</h1>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button 
+                        @click="exportCurrentNode('markdown')"
+                        :disabled="!selectedNode"
+                        class="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        <span>Export Markdown</span>
+                    </button>
+                    <button 
+                        @click="exportCurrentNode('html')"
+                        :disabled="!selectedNode"
+                        class="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                        <i data-lucide="code" class="w-4 h-4"></i>
+                        <span>Export HTML</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 py-6">
+        <!-- File Upload Section -->
+        <div v-if="!jsonData" class="text-center py-12">
+            <div class="max-w-md mx-auto">
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 hover:border-black transition-colors">
+                    <i data-lucide="upload" class="w-12 h-12 text-gray-400 mx-auto mb-4"></i>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">Load Data File</h3>
+                    <p class="text-gray-600 mb-4">Select a JSON file to start exploring your data</p>
+                    <input 
+                        type="file" 
+                        @change="handleFileUpload" 
+                        accept=".json"
+                        class="hidden"
+                        ref="fileInput"
+                    >
+                    <button 
+                        @click="$refs.fileInput.click()"
+                        class="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                    >
+                        Select File
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Explorer Interface -->
+        <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
+            <!-- Tree Navigation -->
+            <div class="lg:col-span-1 bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div class="p-4 border-b border-gray-200 bg-gray-50">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-medium text-gray-900 flex items-center space-x-2">
+                            <i data-lucide="folder-tree" class="w-4 h-4"></i>
+                            <span>Data Structure</span>
+                        </h2>
+                        <button 
+                            @click="resetData"
+                            class="text-sm text-gray-500 hover:text-gray-700 flex items-center space-x-1"
+                        >
+                            <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+                            <span>New File</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="p-4 overflow-y-auto h-full">
+                    <tree-node 
+                        :node="jsonData" 
+                        :path="[]" 
+                        :level="0"
+                        @select="selectNode"
+                        :selected-path="selectedPath"
+                    ></tree-node>
+                </div>
+            </div>
+
+            <!-- Content Viewer -->
+            <div class="lg:col-span-2 bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div class="p-4 border-b border-gray-200 bg-gray-50">
+                    <div v-if="selectedNode">
+                        <!-- Breadcrumbs -->
+                        <nav class="flex flex-wrap items-center text-sm text-gray-600 mb-2">
+                            <span class="breadcrumb-arrow">Home</span>
+                            <span 
+                                v-for="(crumb, index) in breadcrumbs" 
+                                :key="index"
+                                class="breadcrumb-arrow"
+                            >
+                                {{ crumb.name }}
+                                <span v-if="crumb.caption" class="text-xs text-gray-500">
+                                    ({{ crumb.caption }})
+                                </span>
+                            </span>
+                        </nav>
+                        <!-- Title -->
+                        <h2 class="text-lg font-semibold text-gray-900">
+                            {{ getNodeTitle() }}
+                            <span v-if="nodeCaption" class="text-sm font-normal text-gray-500">
+                                ({{ nodeCaption }})
+                            </span>
+                        </h2>
+                    </div>
+                    <div v-else class="text-gray-500">
+                        Select an item from the tree to view its content
+                    </div>
+                </div>
+                <div class="p-6 overflow-y-auto h-full">
+                    <div v-if="selectedNode">
+                        <content-viewer 
+                            :node="selectedNode" 
+                            :path="selectedPath"
+                            @select="selectNode"
+                        ></content-viewer>
+                    </div>
+                    <div v-else class="text-center py-12 text-gray-500">
+                        <i data-lucide="mouse-pointer-click" class="w-12 h-12 mx-auto mb-4 text-gray-300"></i>
+                        <p>Click on any item in the tree to view its detailed information</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const { createApp } = Vue;
+
+    // Tree Node Component
+    const TreeNode = {
+        name: 'TreeNode',
+        props: ['node', 'path', 'level', 'selectedPath'],
+        emits: ['select'],
+        data() {
+            return {
+                expanded: this.level < 2
+            }
+        },
+        computed: {
+            isObject() {
+                return typeof this.node === 'object' && this.node !== null && !Array.isArray(this.node);
+            },
+            isArray() {
+                return Array.isArray(this.node);
+            },
+            hasChildren() {
+                return this.isObject || this.isArray;
+            },
+            hasNonLeafChildren() {
+                if (!this.hasChildren) return false;
+                
+                if (this.isArray) {
+                    return this.node.some(item => !this.isLeafNode(item));
+                } else {
+                    return Object.values(this.node).some(value => !this.isLeafNode(value));
+                }
+            },
+            nodeIcon() {
+                if (this.isObject) return 'folder';
+                if (typeof this.node === 'string') return 'type';
+                if (typeof this.node === 'number') return 'hash';
+                if (typeof this.node === 'boolean') return 'toggle-left';
+                return 'file';
+            },
+            isSelected() {
+                return JSON.stringify(this.path) === JSON.stringify(this.selectedPath);
+            },
+            nodeCaption() {
+                if (!this.hasChildren) return '';
+                return this.findNodeCaption(this.node);
+            },
+            displayName() {
+                if (this.path.length === 0) return 'Main Data';
+                return this.path[this.path.length - 1];
+            },
+            displayNameWithCount() {
+                let name = this.displayName;
+                
+                // Add item count for arrays and objects
+                if (this.isArray) {
+                    name += ` (${this.node.length})`;
+                } else if (this.isObject) {
+                    name += ` (${Object.keys(this.node).length})`;
+                }
+                
+                return name;
+            },
+            childNodes() {
+                if (!this.hasChildren) return [];
+                
+                const children = [];
+                
+                if (this.isArray) {
+                    // For arrays, add children directly without intermediate array node
+                    this.node.forEach((item, index) => {
+                        if (!this.isLeafNode(item)) {
+                            // Get the title from the item if it exists, otherwise use index
+                            const itemTitle = (item && typeof item === 'object' && item.title) 
+                                ? item.title 
+                                : `Item ${index + 1}`;
+                            
+                            // Get child count for the item
+                            const childCount = this.getChildCount(item);
+                            const displayName = childCount > 0 ? `${itemTitle} (${childCount})` : itemTitle;
+                            
+                            children.push({
+                                key: index,
+                                value: item,
+                                displayName: displayName,
+                                path: [...this.path, index],
+                                isArrayItem: true
+                            });
+                        }
+                    });
+                } else {
+                    // For objects, add properties normally
+                    Object.entries(this.node).forEach(([key, value]) => {
+                        if (!this.isLeafNode(value)) {
+                            // For object properties, check if it's an array and get count
+                            let displayName = key;
+                            if (Array.isArray(value)) {
+                                const childCount = this.getChildCount(value);
+                                displayName = childCount > 0 ? `${key} (${childCount})` : key;
+                            } else if (typeof value === 'object' && value !== null) {
+                                const childCount = this.getChildCount(value);
+                                displayName = childCount > 0 ? `${key} (${childCount})` : key;
+                            }
+                            
+                            children.push({
+                                key,
+                                value,
+                                displayName: displayName,
+                                path: [...this.path, key],
+                                isArrayItem: false
+                            });
+                        }
+                    });
+                }
+                
+                return children;
+            }
+        },
+        methods: {
+            getChildCount(node) {
+                if (!node || typeof node !== 'object') return 0;
+                
+                if (Array.isArray(node)) {
+                    // For arrays, count non-leaf items
+                    return node.filter(item => !this.isLeafNode(item)).length;
+                } else {
+                    // For objects, count non-leaf properties
+                    return Object.values(node).filter(value => !this.isLeafNode(value)).length;
+                }
+            },
+            toggle() {
+                if (this.hasChildren) {
+                    this.expanded = !this.expanded;
+                }
+            },
+            selectThis() {
+                this.$emit('select', this.node, this.path);
+            },
+            getNodePreview() {
+                if (typeof this.node === 'string') {
+                    return this.node.length > 30 ? this.node.substring(0, 30) + '...' : this.node;
+                }
+                if (typeof this.node === 'number') return this.node.toString();
+                if (typeof this.node === 'boolean') return this.node ? 'Yes' : 'No';
+                if (this.isArray) return `${this.node.length} items`;
+                if (this.isObject) return `${Object.keys(this.node).length} properties`;
+                return '';
+            },
+            findNodeCaption(node) {
+                if (!node || typeof node !== 'object' || Array.isArray(node)) {
+                    return '';
+                }
+
+                const keys = Object.keys(node);
+                
+                // First priority: fields ending with "name"
+                let nameField = keys.find(key => key.toLowerCase().endsWith('name'));
+                if (nameField && node[nameField]) {
+                    return String(node[nameField]);
+                }
+                
+                // Second priority: fields ending with "title"
+                let titleField = keys.find(key => key.toLowerCase().endsWith('title'));
+                if (titleField && node[titleField]) {
+                    return String(node[titleField]);
+                }
+                
+                // Third priority: fields ending with "id"
+                let idField = keys.find(key => key.toLowerCase().endsWith('id'));
+                if (idField && node[idField]) {
+                    return String(node[idField]);
+                }
+                
+                return '';
+            },
+            isLeafNode(node) {
+                // A leaf node is a primitive value or an empty object/array
+                if (node === null || node === undefined) return true;
+                if (typeof node !== 'object') return true;
+                if (Array.isArray(node) && node.length === 0) return true;
+                if (!Array.isArray(node) && Object.keys(node).length === 0) return true;
+                return false;
+            }
+        },
+        template: `
+            <div v-if="hasNonLeafChildren || path.length === 0">
+                <div 
+                    class="tree-node flex items-center py-2 px-2 rounded cursor-pointer"
+                    :class="{ 'bg-gray-100 border-l-4 border-black': isSelected }"
+                    :style="{ paddingLeft: (level * 20 + 8) + 'px' }"
+                    @click="selectThis"
+                >
+                    <button 
+                        v-if="hasChildren"
+                        @click.stop="toggle"
+                        class="mr-2 p-1 hover:bg-gray-200 rounded"
+                    >
+                        <i :data-lucide="expanded ? 'chevron-down' : 'chevron-right'" class="w-3 h-3"></i>
+                    </button>
+                    <div v-else class="w-6"></div>
+                    
+                    <i :data-lucide="nodeIcon" class="w-4 h-4 mr-2 text-gray-500"></i>
+                    
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-medium text-sm text-gray-900 truncate">
+                                {{ displayNameWithCount }}
+                            </span>
+                            <span v-if="nodeCaption" class="text-xs text-gray-500 truncate">
+                                ({{ nodeCaption }})
+                            </span>
+                        </div>
+                        <div v-if="!hasChildren" class="text-xs text-gray-500 truncate">
+                            {{ getNodePreview() }}
+                        </div>
+                    </div>
+                </div>
+                
+                <div v-if="hasChildren && expanded">
+                    <div v-for="child in childNodes" :key="child.key" :class="{ 'array-item': child.isArrayItem }">
+                        <tree-node
+                            :node="child.value"
+                            :path="child.path"
+                            :level="level + 1"
+                            :selected-path="selectedPath"
+                            @select="(node, path) => $emit('select', node, path)"
+                        ></tree-node>
+                    </div>
+                </div>
+            </div>
+        `
+    };
+
+    // Content Viewer Component
+    const ContentViewer = {
+        name: 'ContentViewer',
+        props: ['node', 'path'],
+        emits: ['select'],
+        computed: {
+            isObject() {
+                return typeof this.node === 'object' && this.node !== null && !Array.isArray(this.node);
+            },
+            isArray() {
+                return Array.isArray(this.node);
+            },
+            nodeType() {
+                if (this.isArray) return 'Array';
+                if (this.isObject) return 'Object';
+                if (typeof this.node === 'string') {
+                    if (this.isDate(this.node)) return 'Date';
+                    if (this.isEmail(this.node)) return 'Email';
+                    if (this.isUrl(this.node)) return 'URL';
+                    if (this.isMarkdown(this.node)) return 'Formatted Text';
+                    return 'Text';
+                }
+                if (typeof this.node === 'number') return 'Number';
+                if (typeof this.node === 'boolean') return 'Boolean';
+                return 'Unknown';
+            },
+            leafNodes() {
+                if (!this.isObject && !this.isArray) return [];
+                
+                const leaves = [];
+                
+                if (this.isArray) {
+                    this.node.forEach((item, index) => {
+                        if (this.isLeafNode(item)) {
+                            leaves.push({
+                                key: index,
+                                displayName: `Item ${index + 1}`,
+                                value: item,
+                                originalKey: index
+                            });
+                        }
+                    });
+                } else {
+                    Object.entries(this.node).forEach(([key, value]) => {
+                        if (this.isLeafNode(value)) {
+                            leaves.push({
+                                key,
+                                displayName: key,
+                                value,
+                                originalKey: key
+                            });
+                        }
+                    });
+                }
+                
+                return leaves;
+            },
+            nonLeafNodes() {
+                if (!this.isObject && !this.isArray) return [];
+                
+                const branches = [];
+                
+                if (this.isArray) {
+                    this.node.forEach((item, index) => {
+                        if (!this.isLeafNode(item)) {
+                            // Get the title from the item if it exists, otherwise use index
+                            const itemTitle = (item && typeof item === 'object' && item.title) 
+                                ? item.title 
+                                : `Item ${index + 1}`;
+                            
+                            branches.push({
+                                key: index,
+                                displayName: itemTitle,
+                                value: item,
+                                caption: this.findNodeCaption(item),
+                                originalKey: index,
+                                isArrayItem: true,
+                                childCount: this.getChildCount(item)
+                            });
+                        }
+                    });
+                } else {
+                    Object.entries(this.node).forEach(([key, value]) => {
+                        if (!this.isLeafNode(value)) {
+                            branches.push({
+                                key,
+                                displayName: key,
+                                value,
+                                caption: this.findNodeCaption(value),
+                                originalKey: key,
+                                isArrayItem: false,
+                                childCount: this.getChildCount(value)
+                            });
+                        }
+                    });
+                }
+                
+                return branches;
+            }
+        },
+        methods: {
+            getChildCount(node) {
+                if (!node || typeof node !== 'object') return 0;
+                return Array.isArray(node) ? node.length : Object.keys(node).length;
+            },
+            isDate(str) {
+                return !isNaN(Date.parse(str)) && /\d{4}-\d{2}-\d{2}/.test(str);
+            },
+            isEmail(str) {
+                return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
+            },
+            isUrl(str) {
+                try {
+                    new URL(str);
+                    return true;
+                } catch {
+                    return false;
+                }
+            },
+            isMarkdown(str) {
+                return /[#*_`\[\](){}]/.test(str) && str.length > 50;
+            },
+            formatDate(str) {
+                return new Date(str).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            },
+            formatNumber(num) {
+                return new Intl.NumberFormat('en-US').format(num);
+            },
+            renderMarkdown(text) {
+                return text
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 rounded">$1</code>')
+                    .replace(/\n/g, '<br>');
+            },
+            isLeafNode(node) {
+                // A leaf node is a primitive value or an empty object/array
+                if (node === null || node === undefined) return true;
+                if (typeof node !== 'object') return true;
+                if (Array.isArray(node) && node.length === 0) return true;
+                if (!Array.isArray(node) && Object.keys(node).length === 0) return true;
+                return false;
+            },
+            findNodeCaption(node) {
+                if (!node || typeof node !== 'object' || Array.isArray(node)) {
+                    return '';
+                }
+
+                const keys = Object.keys(node);
+                
+                // First priority: fields ending with "name"
+                let nameField = keys.find(key => key.toLowerCase().endsWith('name'));
+                if (nameField && node[nameField]) {
+                    return String(node[nameField]);
+                }
+                
+                // Second priority: fields ending with "title"
+                let titleField = keys.find(key => key.toLowerCase().endsWith('title'));
+                if (titleField && node[titleField]) {
+                    return String(node[titleField]);
+                }
+                
+                // Third priority: fields ending with "id"
+                let idField = keys.find(key => key.toLowerCase().endsWith('id'));
+                if (idField && node[idField]) {
+                    return String(node[idField]);
+                }
+                
+                return '';
+            },
+            navigateToChild(child) {
+                this.$emit('select', child.value, [...this.path, child.originalKey]);
+            }
+        },
+        template: `
+            <div class="space-y-6">
+                <!-- Type Badge -->
+                <div class="flex items-center space-x-2">
+                    <span class="px-3 py-1 bg-gray-100 text-gray-800 text-sm font-medium rounded-full">
+                        {{ nodeType }}
+                    </span>
+                    <span v-if="isArray" class="text-sm text-gray-500">
+                        {{ node.length }} items
+                    </span>
+                    <span v-else-if="isObject" class="text-sm text-gray-500">
+                        {{ Object.keys(node).length }} properties
+                    </span>
+                </div>
+
+                <!-- Leaf Nodes Section -->
+                <div v-if="leafNodes.length > 0" class="space-y-4">
+                    <h3 v-if="nonLeafNodes.length > 0" class="text-md font-medium text-gray-900">Properties</h3>
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <div class="grid grid-cols-1 gap-4">
+                            <div v-for="(leaf, index) in leafNodes" :key="index" 
+                                 class="bg-white p-3 rounded border border-gray-200"
+                                 :class="{ 'array-item': isArray }">
+                                <div class="font-medium text-sm text-gray-700 mb-2">
+                                    {{ leaf.displayName }}
+                                </div>
+                                
+                                <!-- String Content -->
+                                <div v-if="typeof leaf.value === 'string'">
+                                    <!-- Date -->
+                                    <div v-if="isDate(leaf.value)" class="flex items-center space-x-3">
+                                        <i data-lucide="calendar" class="w-4 h-4 text-gray-700"></i>
+                                        <div>
+                                            <div class="font-medium">{{ formatDate(leaf.value) }}</div>
+                                            <div class="text-xs text-gray-500">{{ leaf.value }}</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Email -->
+                                    <div v-else-if="isEmail(leaf.value)" class="flex items-center space-x-3">
+                                        <i data-lucide="mail" class="w-4 h-4 text-gray-700"></i>
+                                        <a :href="'mailto:' + leaf.value" class="text-gray-900 hover:underline">{{ leaf.value }}</a>
+                                    </div>
+                                    
+                                    <!-- URL -->
+                                    <div v-else-if="isUrl(leaf.value)" class="flex items-center space-x-3">
+                                        <i data-lucide="external-link" class="w-4 h-4 text-gray-700"></i>
+                                        <a :href="leaf.value" target="_blank" class="text-gray-900 hover:underline">{{ leaf.value }}</a>
+                                    </div>
+                                    
+                                    <!-- Markdown -->
+                                    <div v-else-if="isMarkdown(leaf.value)" class="prose prose-sm max-w-none">
+                                        <div v-html="renderMarkdown(leaf.value)"></div>
+                                    </div>
+                                    
+                                    <!-- Regular Text -->
+                                    <div v-else class="flex items-start space-x-3">
+                                        <i data-lucide="type" class="w-4 h-4 text-gray-500 mt-0.5"></i>
+                                        <div class="whitespace-pre-wrap">{{ leaf.value }}</div>
+                                    </div>
+                                </div>
+
+                                <!-- Number Content -->
+                                <div v-else-if="typeof leaf.value === 'number'" class="flex items-center space-x-3">
+                                    <i data-lucide="hash" class="w-4 h-4 text-gray-700"></i>
+                                    <div class="text-lg font-mono">{{ formatNumber(leaf.value) }}</div>
+                                </div>
+
+                                <!-- Boolean Content -->
+                                <div v-else-if="typeof leaf.value === 'boolean'" class="flex items-center space-x-3">
+                                    <i :data-lucide="leaf.value ? 'check-circle' : 'x-circle'" 
+                                       class="w-4 h-4 text-gray-700"></i>
+                                    <div class="font-medium">
+                                        {{ leaf.value ? 'True' : 'False' }}
+                                    </div>
+                                </div>
+                                
+                                <!-- Empty Object/Array -->
+                                <div v-else-if="typeof leaf.value === 'object'" class="flex items-center space-x-3">
+                                    <i :data-lucide="Array.isArray(leaf.value) ? 'list' : 'folder'" class="w-4 h-4 text-gray-500"></i>
+                                    <div class="text-gray-500">
+                                        {{ Array.isArray(leaf.value) ? 'Empty array' : 'Empty object' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Non-Leaf Nodes Section -->
+                <div v-if="nonLeafNodes.length > 0" class="space-y-4">
+                    <h3 v-if="leafNodes.length > 0" class="text-md font-medium text-gray-900">Sub-items</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div v-for="(branch, index) in nonLeafNodes" :key="index" 
+                             class="bg-white p-4 rounded border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer"
+                             :class="{ 'array-item': branch.isArrayItem }"
+                             @click="navigateToChild(branch)">
+                            <div class="flex items-center space-x-2 mb-2">
+                                <i :data-lucide="Array.isArray(branch.value) ? 'folder' : 'folder'" class="w-5 h-5 text-gray-700"></i>
+                                <div class="font-medium text-gray-900">
+                                    {{ branch.displayName }}
+                                    <span class="text-xs text-gray-500">({{ branch.childCount }})</span>
+                                </div>
+                                <span v-if="branch.caption" class="text-xs text-gray-500">
+                                    ({{ branch.caption }})
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Primitive Value Display -->
+                <div v-if="!isObject && !isArray" class="bg-gray-50 rounded-lg p-4">
+                    <!-- String Content -->
+                    <div v-if="typeof node === 'string'">
+                        <!-- Date -->
+                        <div v-if="isDate(node)" class="flex items-center space-x-3">
+                            <i data-lucide="calendar" class="w-5 h-5 text-gray-700"></i>
+                            <div>
+                                <div class="font-medium">{{ formatDate(node) }}</div>
+                                <div class="text-sm text-gray-500">{{ node }}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Email -->
+                        <div v-else-if="isEmail(node)" class="flex items-center space-x-3">
+                            <i data-lucide="mail" class="w-5 h-5 text-gray-700"></i>
+                            <a :href="'mailto:' + node" class="text-gray-900 hover:underline">{{ node }}</a>
+                        </div>
+                        
+                        <!-- URL -->
+                        <div v-else-if="isUrl(node)" class="flex items-center space-x-3">
+                            <i data-lucide="external-link" class="w-5 h-5 text-gray-700"></i>
+                            <a :href="node" target="_blank" class="text-gray-900 hover:underline">{{ node }}</a>
+                        </div>
+                        
+                        <!-- Markdown -->
+                        <div v-else-if="isMarkdown(node)" class="prose prose-sm max-w-none">
+                            <div v-html="renderMarkdown(node)"></div>
+                        </div>
+                        
+                        <!-- Regular Text -->
+                        <div v-else class="flex items-start space-x-3">
+                            <i data-lucide="type" class="w-5 h-5 text-gray-500 mt-0.5"></i>
+                            <div class="whitespace-pre-wrap">{{ node }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Number Content -->
+                    <div v-else-if="typeof node === 'number'" class="flex items-center space-x-3">
+                        <i data-lucide="hash" class="w-5 h-5 text-gray-700"></i>
+                        <div class="text-2xl font-mono">{{ formatNumber(node) }}</div>
+                    </div>
+
+                    <!-- Boolean Content -->
+                    <div v-else-if="typeof node === 'boolean'" class="flex items-center space-x-3">
+                        <i :data-lucide="node ? 'check-circle' : 'x-circle'" 
+                           class="w-5 h-5 text-gray-700"></i>
+                        <div class="text-lg font-medium">
+                            {{ node ? 'True' : 'False' }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `
+    };
+
+    // Main App
+    createApp({
+        components: {
+            TreeNode,
+            ContentViewer
+        },
+        data() {
+            return {
+                jsonData: null,
+                selectedNode: null,
+                selectedPath: []
+            }
+        },
+        computed: {
+            breadcrumbs() {
+                return this.selectedPath.map((segment, index) => {
+                    const path = this.selectedPath.slice(0, index + 1);
+                    const node = this.getNodeByPath(this.jsonData, path);
+                    const caption = this.findNodeCaption(node);
+                    
+                    return {
+                        name: typeof segment === 'number' ? 'Item ' + (segment + 1) : segment,
+                        caption: caption
+                    };
+                });
+            },
+            nodeCaption() {
+                return this.findNodeCaption(this.selectedNode);
+            }
+        },
+        methods: {
+            handleFileUpload(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            this.jsonData = JSON.parse(e.target.result);
+                            this.selectedNode = this.jsonData;
+                            this.selectedPath = [];
+                        } catch (error) {
+                            alert('Error reading JSON file. Please verify that the format is correct.');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            },
+            selectNode(node, path) {
+                this.selectedNode = node;
+                this.selectedPath = path;
+            },
+            resetData() {
+                this.jsonData = null;
+                this.selectedNode = null;
+                this.selectedPath = [];
+            },
+            getNodeTitle() {
+                const level = this.selectedPath.length;
+                if (level === 0) return 'Main Data';
+                
+                const titles = ['Section', 'Subsection', 'Item', 'Detail', 'Information'];
+                const title = titles[Math.min(level - 1, titles.length - 1)];
+                const name = this.selectedPath[this.selectedPath.length - 1];
+                
+                return title + ': ' + (typeof name === 'number' ? 'Item ' + (name + 1) : name);
+            },
+            getNodeByPath(rootNode, path) {
+                if (!path || path.length === 0) return rootNode;
+                
+                let current = rootNode;
+                for (const segment of path) {
+                    if (current === null || current === undefined || typeof current !== 'object') {
+                        return undefined;
+                    }
+                    current = current[segment];
+                }
+                return current;
+            },
+            findNodeCaption(node) {
+                if (!node || typeof node !== 'object' || Array.isArray(node)) {
+                    return '';
+                }
+
+                const keys = Object.keys(node);
+                
+                // First priority: fields ending with "name"
+                let nameField = keys.find(key => key.toLowerCase().endsWith('name'));
+                if (nameField && node[nameField]) {
+                    return String(node[nameField]);
+                }
+                
+                // Second priority: fields ending with "title"
+                let titleField = keys.find(key => key.toLowerCase().endsWith('title'));
+                if (titleField && node[titleField]) {
+                    return String(node[titleField]);
+                }
+                
+                // Third priority: fields ending with "id"
+                let idField = keys.find(key => key.toLowerCase().endsWith('id'));
+                if (idField && node[idField]) {
+                    return String(node[idField]);
+                }
+                
+                return '';
+            },
+            exportCurrentNode(format) {
+                if (!this.selectedNode) return;
+                
+                const content = this.generateExportContent(this.selectedNode, this.selectedPath, format);
+                const filename = 'data-' + (this.selectedPath.join('-') || 'main') + '.' + (format === 'markdown' ? 'md' : 'html');
+                
+                const blob = new Blob([content], { 
+                    type: format === 'markdown' ? 'text/markdown' : 'text/html' 
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            },
+            generateExportContent(node, path, format) {
+                const title = this.getNodeTitle();
+                
+                if (format === 'markdown') {
+                    return this.generateMarkdown(node, title, path);
+                } else {
+                    return this.generateHTML(node, title, path);
+                }
+            },
+            generateMarkdown(node, title, level) {
+                if (typeof level === 'undefined') level = 1;
+                let content = '#'.repeat(level) + ' ' + title + '\n\n';
+                
+                if (typeof node === 'object' && node !== null) {
+                    if (Array.isArray(node)) {
+                        node.forEach((item, index) => {
+                            content += '#'.repeat(level + 1) + ' Item ' + (index + 1) + '\n\n';
+                            content += this.formatValueForMarkdown(item) + '\n\n';
+                        });
+                    } else {
+                        Object.entries(node).forEach(([key, value]) => {
+                            content += '#'.repeat(level + 1) + ' ' + key + '\n\n';
+                            content += this.formatValueForMarkdown(value) + '\n\n';
+                        });
+                    }
+                } else {
+                    content += this.formatValueForMarkdown(node) + '\n\n';
+                }
+                
+                return content;
+            },
+            generateHTML(node, title, path) {
+                let content = '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>' + title + '</title>\n    <style>\n        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }\n        h1, h2, h3, h4, h5, h6 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; }\n        .value { background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 10px 0; }\n        .date { color: #333; }\n        .number { color: #333; font-weight: bold; }\n        .boolean { color: #333; font-weight: bold; }\n    </style>\n</head>\n<body>';
+                
+                content += this.generateHTMLContent(node, title, 1);
+                content += '</body></html>';
+                
+                return content;
+            },
+            generateHTMLContent(node, title, level) {
+                let content = '<h' + level + ' id="' + this.slugify(title) + '">' + title + '</h' + level + '>';
+                
+                if (typeof node === 'object' && node !== null) {
+                    if (Array.isArray(node)) {
+                        node.forEach((item, index) => {
+                            const itemTitle = 'Item ' + (index + 1);
+                            content += this.generateHTMLContent(item, itemTitle, level + 1);
+                        });
+                    } else {
+                        Object.entries(node).forEach(([key, value]) => {
+                            content += this.generateHTMLContent(value, key, level + 1);
+                        });
+                    }
+                } else {
+                    content += '<div class="value">' + this.formatValueForHTML(node) + '</div>';
+                }
+                
+                return content;
+            },
+            formatValueForMarkdown(value) {
+                if (typeof value === 'string') {
+                    if (this.isDate(value)) return '📅 ' + this.formatDate(value);
+                    if (this.isEmail(value)) return '📧 [' + value + '](mailto:' + value + ')';
+                    if (this.isUrl(value)) return '🔗 [' + value + '](' + value + ')';
+                    return value;
+                }
+                if (typeof value === 'number') return '🔢 ' + this.formatNumber(value);
+                if (typeof value === 'boolean') return '✓ ' + (value ? 'True' : 'False');
+                if (typeof value === 'object') return JSON.stringify(value, null, 2);
+                return String(value);
+            },
+            formatValueForHTML(value) {
+                if (typeof value === 'string') {
+                    if (this.isDate(value)) return '<span class="date">📅 ' + this.formatDate(value) + '</span>';
+                    if (this.isEmail(value)) return '📧 <a href="mailto:' + value + '">' + value + '</a>';
+                    if (this.isUrl(value)) return '🔗 <a href="' + value + '" target="_blank">' + value + '</a>';
+                    return value.replace(/\n/g, '<br>');
+                }
+                if (typeof value === 'number') return '<span class="number">🔢 ' + this.formatNumber(value) + '</span>';
+                if (typeof value === 'boolean') return '<span class="boolean">✓ ' + (value ? 'True' : 'False') + '</span>';
+                if (typeof value === 'object') return '<pre>' + JSON.stringify(value, null, 2) + '</pre>';
+                return String(value);
+            },
+            slugify(text) {
+                return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+            },
+            isDate(str) {
+                return typeof str === 'string' && !isNaN(Date.parse(str)) && /\d{4}-\d{2}-\d{2}/.test(str);
+            },
+            isEmail(str) {
+                return typeof str === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
+            },
+            isUrl(str) {
+                if (typeof str !== 'string') return false;
+                try {
+                    new URL(str);
+                    return true;
+                } catch {
+                    return false;
+                }
+            },
+            formatDate(str) {
+                return new Date(str).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            },
+            formatNumber(num) {
+                return new Intl.NumberFormat('en-US').format(num);
+            }
+        },
+        mounted() {
+            // Initialize Lucide icons
+            lucide.createIcons();
+        },
+        updated() {
+            // Re-initialize icons after DOM updates
+            this.$nextTick(() => {
+                lucide.createIcons();
+            });
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
