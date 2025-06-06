@@ -248,32 +248,64 @@
                 const children = [];
                 
                 if (this.isArray) {
-                    // For arrays, add children directly without intermediate array node
+                    // For arrays, we need to handle special cases like "items" arrays
+                    // If this is an "items" array, we'll skip it and show its children directly
+                    // in the parent node's childNodes computed property
                     this.node.forEach((item, index) => {
                         if (!this.isLeafNode(item)) {
-                            // Get the title from the item if it exists, otherwise use index
+                            // Get the title from the item if it exists
                             const itemTitle = (item && typeof item === 'object' && item.title) 
                                 ? item.title 
                                 : `Item ${index + 1}`;
                             
-                            // Get child count for the item
-                            const childCount = this.getChildCount(item);
-                            const displayName = childCount > 0 ? `${itemTitle} (${childCount})` : itemTitle;
-                            
-                            children.push({
-                                key: index,
-                                value: item,
-                                displayName: displayName,
-                                path: [...this.path, index],
-                                isArrayItem: true
-                            });
+                            // If the item has its own "items" array, we'll process those directly
+                            if (item && typeof item === 'object' && item.items && Array.isArray(item.items)) {
+                                // Add the item itself
+                                const childCount = this.getChildCount(item);
+                                children.push({
+                                    key: index,
+                                    value: item,
+                                    displayName: itemTitle,
+                                    path: [...this.path, index],
+                                    isArrayItem: true,
+                                    childCount: childCount
+                                });
+                            } else {
+                                // Regular item, add it normally
+                                children.push({
+                                    key: index,
+                                    value: item,
+                                    displayName: itemTitle,
+                                    path: [...this.path, index],
+                                    isArrayItem: true
+                                });
+                            }
                         }
                     });
                 } else {
-                    // For objects, add properties normally
+                    // For objects, process properties
                     Object.entries(this.node).forEach(([key, value]) => {
-                        if (!this.isLeafNode(value)) {
-                            // For object properties, check if it's an array and get count
+                        if (key === 'items' && Array.isArray(value)) {
+                            // If this is an "items" array property, add its children directly
+                            value.forEach((item, index) => {
+                                if (!this.isLeafNode(item)) {
+                                    const itemTitle = (item && typeof item === 'object' && item.title) 
+                                        ? item.title 
+                                        : `Item ${index + 1}`;
+                                    
+                                    const childCount = this.getChildCount(item);
+                                    children.push({
+                                        key: `${key}_${index}`,
+                                        value: item,
+                                        displayName: itemTitle,
+                                        path: [...this.path, key, index],
+                                        isArrayItem: true,
+                                        childCount: childCount
+                                    });
+                                }
+                            });
+                        } else if (!this.isLeafNode(value)) {
+                            // Regular property
                             let displayName = key;
                             if (Array.isArray(value)) {
                                 const childCount = this.getChildCount(value);
@@ -305,8 +337,19 @@
                     // For arrays, count non-leaf items
                     return node.filter(item => !this.isLeafNode(item)).length;
                 } else {
-                    // For objects, count non-leaf properties
-                    return Object.values(node).filter(value => !this.isLeafNode(value)).length;
+                    // For objects, count properties except "items" which we'll handle specially
+                    const count = Object.entries(node).reduce((acc, [key, value]) => {
+                        if (key === 'items' && Array.isArray(value)) {
+                            // For "items" array, count its non-leaf children
+                            return acc + value.filter(item => !this.isLeafNode(item)).length;
+                        } else if (!this.isLeafNode(value)) {
+                            // For other properties, count if non-leaf
+                            return acc + 1;
+                        }
+                        return acc;
+                    }, 0);
+                    
+                    return count;
                 }
             },
             toggle() {
@@ -456,7 +499,7 @@
                     });
                 } else {
                     Object.entries(this.node).forEach(([key, value]) => {
-                        if (this.isLeafNode(value)) {
+                        if (key !== 'items' && this.isLeafNode(value)) {
                             leaves.push({
                                 key,
                                 displayName: key,
@@ -474,6 +517,7 @@
                 
                 const branches = [];
                 
+                // First, add direct non-leaf children that are not "items"
                 if (this.isArray) {
                     this.node.forEach((item, index) => {
                         if (!this.isLeafNode(item)) {
@@ -495,7 +539,7 @@
                     });
                 } else {
                     Object.entries(this.node).forEach(([key, value]) => {
-                        if (!this.isLeafNode(value)) {
+                        if (key !== 'items' && !this.isLeafNode(value)) {
                             branches.push({
                                 key,
                                 displayName: key,
@@ -509,13 +553,52 @@
                     });
                 }
                 
+                // Then, if there's an "items" property and it's an array, add its children directly
+                if (this.isObject && this.node.items && Array.isArray(this.node.items)) {
+                    this.node.items.forEach((item, index) => {
+                        if (!this.isLeafNode(item)) {
+                            const itemTitle = (item && typeof item === 'object' && item.title) 
+                                ? item.title 
+                                : `Item ${index + 1}`;
+                            
+                            branches.push({
+                                key: `items_${index}`,
+                                displayName: itemTitle,
+                                value: item,
+                                caption: this.findNodeCaption(item),
+                                originalKey: ['items', index],
+                                isArrayItem: true,
+                                childCount: this.getChildCount(item)
+                            });
+                        }
+                    });
+                }
+                
                 return branches;
             }
         },
         methods: {
             getChildCount(node) {
                 if (!node || typeof node !== 'object') return 0;
-                return Array.isArray(node) ? node.length : Object.keys(node).length;
+                
+                let count = 0;
+                
+                if (Array.isArray(node)) {
+                    count = node.filter(item => !this.isLeafNode(item)).length;
+                } else {
+                    // Count non-leaf properties
+                    Object.entries(node).forEach(([key, value]) => {
+                        if (key === 'items' && Array.isArray(value)) {
+                            // For "items" array, count its non-leaf children
+                            count += value.filter(item => !this.isLeafNode(item)).length;
+                        } else if (!this.isLeafNode(value)) {
+                            // For other properties, count if non-leaf
+                            count += 1;
+                        }
+                    });
+                }
+                
+                return count;
             },
             isDate(str) {
                 return !isNaN(Date.parse(str)) && /\d{4}-\d{2}-\d{2}/.test(str);
@@ -589,7 +672,12 @@
                 return '';
             },
             navigateToChild(child) {
-                this.$emit('select', child.value, [...this.path, child.originalKey]);
+                // Handle array paths for items
+                if (Array.isArray(child.originalKey)) {
+                    this.$emit('select', child.value, [...this.path, ...child.originalKey]);
+                } else {
+                    this.$emit('select', child.value, [...this.path, child.originalKey]);
+                }
             }
         },
         template: `
