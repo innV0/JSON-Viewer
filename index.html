@@ -3,10 +3,44 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JSON Explorer</title>
+<title>JSON Viewer</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+<!-- ========================================= -->
+<!-- CONFIGURATION SETTINGS - EDIT HERE      -->
+<!-- ========================================= -->
+<script>
+// Application Configuration
+const APP_CONFIG = {
+    // Application Info
+    appName: 'JSON Viewer',
+    version: '1.2.0',
+    
+    // UI Components Visibility
+    showHeader: true,
+    showFooter: false,
+    showSidebar: true,
+    
+    // Default File Loading
+    defaultFile: '', // e.g., 'data.json' or 'https://example.com/data.json'
+    
+    // Logo Configuration
+    logoUrl: 'https://innv0.com/assets/innv0_logo.svg'
+};
+
+// Parse URL parameters to override config
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('showHeader') !== null) APP_CONFIG.showHeader = urlParams.get('showHeader') === 'true';
+if (urlParams.get('showFooter') !== null) APP_CONFIG.showFooter = urlParams.get('showFooter') === 'true';
+if (urlParams.get('showSidebar') !== null) APP_CONFIG.showSidebar = urlParams.get('showSidebar') === 'true';
+if (urlParams.get('defaultFile')) APP_CONFIG.defaultFile = urlParams.get('defaultFile');
+if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
+</script>
+<!-- ========================================= -->
+
 <script>
     tailwind.config = {
         theme: {
@@ -87,37 +121,120 @@
     .tag-relation:hover {
         background-color: rgba(139, 92, 246, 0.2);
     }
+    .logo-container {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: white;
+        border-radius: 8px;
+        padding: 4px;
+    }
+    .logo-container img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+    .field-heading {
+        border-bottom: 2px solid #e5e7eb;
+        padding-bottom: 8px;
+        margin-bottom: 16px;
+        margin-top: 24px;
+    }
+    .field-heading:first-child {
+        margin-top: 0;
+    }
+    .field-id {
+        background-color: #f3f4f6;
+        color: #6b7280;
+        font-size: 0.75rem;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: monospace;
+    }
+    .field-compact {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+    }
+    .field-compact .field-label {
+        font-weight: 500;
+        color: #374151;
+        min-width: 80px;
+    }
+    .field-compact .field-value {
+        color: #111827;
+    }
+    .markdown-content {
+        line-height: 1.6;
+    }
+    .markdown-content h1, .markdown-content h2, .markdown-content h3,
+    .markdown-content h4, .markdown-content h5, .markdown-content h6 {
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+        font-weight: 600;
+    }
+    .markdown-content h1 { font-size: 1.5em; }
+    .markdown-content h2 { font-size: 1.3em; }
+    .markdown-content h3 { font-size: 1.1em; }
+    .markdown-content p {
+        margin-bottom: 1em;
+    }
+    .markdown-content ul, .markdown-content ol {
+        margin-bottom: 1em;
+        padding-left: 1.5em;
+    }
+    .markdown-content code {
+        background-color: #f3f4f6;
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-family: monospace;
+        font-size: 0.9em;
+    }
+    .markdown-content pre {
+        background-color: #f3f4f6;
+        padding: 12px;
+        border-radius: 6px;
+        overflow-x: auto;
+        margin-bottom: 1em;
+    }
+    .markdown-content blockquote {
+        border-left: 4px solid #d1d5db;
+        padding-left: 1em;
+        margin: 1em 0;
+        color: #6b7280;
+    }
+    
+    /* Drag and Drop Styles */
+    .drop-zone {
+        transition: all 0.3s ease;
+    }
+    .drop-zone.drag-over {
+        border-color: #000000 !important;
+        background-color: #f9fafb;
+        transform: scale(1.02);
+    }
+    .drop-zone.drag-over .drop-content {
+        color: #000000;
+    }
 </style>
 </head>
 <body class="bg-white">
 <div id="app" v-cloak>
     <!-- Header -->
-    <header class="bg-white border-b border-gray-200">
+    <header v-if="config.showHeader" class="bg-white border-b border-gray-200">
         <div class="max-w-7xl mx-auto px-4 py-4">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-3">
-                    <div class="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
-                        <i data-lucide="file-json" class="w-5 h-5 text-white"></i>
+                    <div class="logo-container">
+                        <img :src="config.logoUrl" :alt="config.appName + ' Logo'" />
                     </div>
-                    <h1 class="text-xl font-semibold text-gray-900">JSON Explorer</h1>
-                </div>
-                <div class="flex items-center space-x-3">
-                    <button 
-                        @click="exportCurrentNode('markdown')"
-                        :disabled="!selectedNode"
-                        class="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                    >
-                        <i data-lucide="download" class="w-4 h-4"></i>
-                        <span>Export Markdown</span>
-                    </button>
-                    <button 
-                        @click="exportCurrentNode('html')"
-                        :disabled="!selectedNode"
-                        class="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                    >
-                        <i data-lucide="code" class="w-4 h-4"></i>
-                        <span>Export HTML</span>
-                    </button>
+                    <div>
+                        <h1 class="text-xl font-semibold text-gray-900">{{ config.appName }}</h1>
+                        <span class="text-xs text-gray-500">v{{ config.version }}</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -128,31 +245,83 @@
         <!-- File Upload Section -->
         <div v-if="!jsonData" class="text-center py-12">
             <div class="max-w-md mx-auto">
-                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 hover:border-black transition-colors">
-                    <i data-lucide="upload" class="w-12 h-12 text-gray-400 mx-auto mb-4"></i>
-                    <h3 class="text-lg font-medium text-gray-900 mb-2">Load Data File</h3>
-                    <p class="text-gray-600 mb-4">Select a JSON file to start exploring your data</p>
-                    <input 
-                        type="file" 
-                        @change="handleFileUpload" 
-                        accept=".json"
-                        class="hidden"
-                        ref="fileInput"
-                    >
-                    <button 
-                        @click="$refs.fileInput.click()"
-                        class="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-                    >
-                        Select File
-                    </button>
+                <div 
+                    class="drop-zone border-2 border-dashed border-gray-300 rounded-lg p-8 transition-colors cursor-pointer"
+                    :class="{ 'drag-over': isDragOver }"
+                    @click="$refs.fileInput.click()"
+                    @dragover.prevent="handleDragOver"
+                    @dragleave.prevent="handleDragLeave"
+                    @drop.prevent="handleDrop"
+                >
+                    <div class="drop-content">
+                        <div class="logo-container mx-auto mb-4" style="width: 48px; height: 48px;">
+                            <img :src="config.logoUrl" :alt="config.appName + ' Logo'" />
+                        </div>
+                        <div v-if="!isDragOver">
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">Load JSON File</h3>
+                            <p class="text-gray-600 mb-4">Drag and drop a JSON file here, or click to select</p>
+                            <div class="flex items-center justify-center space-x-2 mb-4">
+                                <i data-lucide="upload" class="w-5 h-5 text-gray-500"></i>
+                                <span class="text-sm text-gray-500">Supports .json files</span>
+                            </div>
+                        </div>
+                        <div v-else>
+                            <h3 class="text-lg font-medium text-black mb-2">Drop your JSON file here</h3>
+                            <p class="text-gray-700 mb-4">Release to upload the file</p>
+                            <i data-lucide="file-plus" class="w-8 h-8 mx-auto text-black"></i>
+                        </div>
+                        
+                        <input 
+                            type="file" 
+                            @change="handleFileUpload" 
+                            accept=".json"
+                            class="hidden"
+                            ref="fileInput"
+                        >
+                        
+                        <button 
+                            v-if="!isDragOver"
+                            class="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors inline-flex items-center space-x-2"
+                            @click.stop="$refs.fileInput.click()"
+                        >
+                            <i data-lucide="folder-open" class="w-4 h-4"></i>
+                            <span>Choose File</span>
+                        </button>
+                        
+                        <div v-if="config.defaultFile && !isDragOver" class="mt-6 pt-4 border-t border-gray-200">
+                            <p class="text-sm text-gray-500 mb-2">or</p>
+                            <button 
+                                @click.stop="loadDefaultFile"
+                                class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm inline-flex items-center space-x-2"
+                            >
+                                <i data-lucide="download-cloud" class="w-4 h-4"></i>
+                                <span>Load Default File</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- File Format Help -->
+                <div class="mt-6 text-left bg-gray-50 rounded-lg p-4">
+                    <h4 class="text-sm font-medium text-gray-900 mb-2 flex items-center">
+                        <i data-lucide="info" class="w-4 h-4 mr-2"></i>
+                        Supported Format
+                    </h4>
+                    <p class="text-sm text-gray-600 mb-2">Upload valid JSON files with any structure. The viewer supports:</p>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li class="flex items-center"><i data-lucide="check" class="w-3 h-3 mr-2 text-green-600"></i>Nested objects and arrays</li>
+                        <li class="flex items-center"><i data-lucide="check" class="w-3 h-3 mr-2 text-green-600"></i>StruML tagging convention</li>
+                        <li class="flex items-center"><i data-lucide="check" class="w-3 h-3 mr-2 text-green-600"></i>Markdown content fields</li>
+                        <li class="flex items-center"><i data-lucide="check" class="w-3 h-3 mr-2 text-green-600"></i>Date and URL auto-detection</li>
+                    </ul>
                 </div>
             </div>
         </div>
 
         <!-- Explorer Interface -->
-        <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
+        <div v-else :class="config.showSidebar ? 'grid grid-cols-1 lg:grid-cols-3 gap-6' : 'grid grid-cols-1 gap-6'">
             <!-- Tree Navigation -->
-            <div class="lg:col-span-1 bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div v-if="config.showSidebar" class="lg:col-span-1 bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div class="p-4 border-b border-gray-200 bg-gray-50">
                     <div class="flex items-center justify-between">
                         <h2 class="font-medium text-gray-900 flex items-center space-x-2">
@@ -180,35 +349,96 @@
             </div>
 
             <!-- Content Viewer -->
-            <div class="lg:col-span-2 bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div :class="config.showSidebar ? 'lg:col-span-2' : 'col-span-1'" class="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div class="p-4 border-b border-gray-200 bg-gray-50">
-                    <div v-if="selectedNode">
-                        <!-- Breadcrumbs -->
-                        <nav class="flex flex-wrap items-center text-sm text-gray-600 mb-2">
-                            <span class="breadcrumb-arrow">Home</span>
-                            <span 
-                                v-for="(crumb, index) in breadcrumbs" 
-                                :key="index"
-                                class="breadcrumb-arrow"
-                            >
-                                {{ crumb.name }}
-                                <span v-if="crumb.caption" class="text-xs text-gray-500">
-                                    ({{ crumb.caption }})
-                                </span>
-                            </span>
-                        </nav>
-                        <!-- Title -->
-                        <h2 class="text-lg font-semibold text-gray-900">
-                            {{ getNodeTitle() }}
-                            <span v-if="nodeCaption" class="text-sm font-normal text-gray-500">
-                                ({{ nodeCaption }})
-                            </span>
-                        </h2>
-                    </div>
-                    <div v-else class="text-gray-500">
-                        Select an item from the tree to view its content
-                    </div>
-                </div>
+    <div v-if="selectedNode">
+        <!-- Breadcrumbs -->
+        <nav class="flex flex-wrap items-center text-xs text-gray-500 mb-2">
+            <span class="breadcrumb-arrow">Home</span>
+            <span 
+                v-for="(crumb, index) in breadcrumbs" 
+                :key="index"
+                class="breadcrumb-arrow"
+            >
+                {{ crumb.name }}
+                <span v-if="crumb.caption" class="text-xs text-gray-400">
+                    ({{ crumb.caption }})
+                </span>
+            </span>
+        </nav>
+        
+        <!-- Module Type and Title -->
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="text-lg font-semibold text-gray-900">
+                {{ getNodeTitle() }}
+                <span v-if="nodeCaption" class="text-sm font-normal text-gray-500">
+                    ({{ nodeCaption }})
+                </span>
+            </h2>
+            
+            <!-- Export Icons -->
+            <div class="flex items-center space-x-2">
+                <button 
+                    @click="exportCurrentNode('markdown')"
+                    :disabled="!selectedNode"
+                    class="p-2 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Export Markdown"
+                >
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                </button>
+                <button 
+                    @click="exportCurrentNode('html')"
+                    :disabled="!selectedNode"
+                    class="p-2 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Export HTML"
+                >
+                    <i data-lucide="code" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Compact Metadata Row -->
+        <div class="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+            <!-- Object Type -->
+            <span class="flex items-center">
+                <i :data-lucide="getNodeIcon()" class="w-3 h-3 mr-1"></i>
+                {{ getNodeType() }}
+            </span>
+            
+            <!-- Property Count -->
+            <span v-if="isObject || isArray">
+                {{ getPropertyCount() }} {{ isArray ? 'items' : 'properties' }}
+            </span>
+            
+            <!-- ID -->
+            <span v-if="getNodeId()" class="font-mono bg-gray-100 px-2 py-0.5 rounded">
+                id: {{ getNodeId() }}
+            </span>
+            
+            <!-- Tags -->
+            <div v-if="getNodeTags().length > 0" class="flex flex-wrap gap-1">
+                <span 
+                    v-for="tag in getNodeTags().slice(0, 3)" 
+                    :key="tag.full"
+                    :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs', getTagClass(tag)]"
+                >
+                    <span v-if="tag.type === 'relation'">
+                        {{ tag.relationType }}»{{ tag.target }}
+                    </span>
+                    <span v-else>
+                        {{ tag.value }}
+                    </span>
+                </span>
+                <span v-if="getNodeTags().length > 3" class="text-gray-400">
+                    +{{ getNodeTags().length - 3 }} more
+                </span>
+            </div>
+        </div>
+    </div>
+    <div v-else class="text-gray-500">
+        Select an item from the tree to view its content
+    </div>
+</div>
                 <div class="p-6 overflow-y-auto h-full">
                     <div v-if="selectedNode">
                         <content-viewer 
@@ -226,6 +456,23 @@
             </div>
         </div>
     </div>
+
+    <!-- Footer -->
+    <footer v-if="config.showFooter" class="bg-gray-50 border-t border-gray-200 mt-8">
+        <div class="max-w-7xl mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="logo-container" style="width: 24px; height: 24px;">
+                        <img :src="config.logoUrl" :alt="config.appName + ' Logo'" />
+                    </div>
+                    <span class="text-sm text-gray-600">{{ config.appName }} v{{ config.version }}</span>
+                </div>
+                <div class="text-sm text-gray-500">
+                    Powered by Vue.js & Tailwind CSS
+                </div>
+            </div>
+        </div>
+    </footer>
 </div>
 
 <script>
@@ -279,94 +526,62 @@
                 return this.path[this.path.length - 1];
             },
             displayNameWithCount() {
-                let name = this.displayName;
-                
-                // Add item count for arrays and objects
-                if (this.isArray) {
-                    name += ` (${this.node.length})`;
-                } else if (this.isObject) {
-                    name += ` (${Object.keys(this.node).length})`;
-                }
-                
-                return name;
-            },
+    let name = this.displayName;
+    
+    // Add item count for arrays and objects
+    if (this.isArray) {
+        name += ` (${this.node.length})`;
+    } else if (this.isObject) {
+        name += ` (${Object.keys(this.node).length})`;
+    }
+    
+    return name;
+}
+            ,
             childNodes() {
                 if (!this.hasChildren) return [];
                 
                 const children = [];
                 
                 if (this.isArray) {
-                    // For arrays, we need to handle special cases like "items" arrays
-                    // If this is an "items" array, we'll skip it and show its children directly
-                    // in the parent node's childNodes computed property
                     this.node.forEach((item, index) => {
                         if (!this.isLeafNode(item)) {
-                            // Get the title from the item if it exists
                             const itemTitle = (item && typeof item === 'object' && item.title) 
                                 ? item.title 
                                 : `Item ${index + 1}`;
                             
-                            // If the item has its own "items" array, we'll process those directly
-                            if (item && typeof item === 'object' && item.items && Array.isArray(item.items)) {
-                                // Add the item itself
-                                const childCount = this.getChildCount(item);
-                                children.push({
-                                    key: index,
-                                    value: item,
-                                    displayName: itemTitle,
-                                    path: [...this.path, index],
-                                    isArrayItem: true,
-                                    childCount: childCount
-                                });
-                            } else {
-                                // Regular item, add it normally
-                                children.push({
-                                    key: index,
-                                    value: item,
-                                    displayName: itemTitle,
-                                    path: [...this.path, index],
-                                    isArrayItem: true
-                                });
-                            }
+                            children.push({
+                                key: index,
+                                value: item,
+                                displayName: itemTitle,
+                                path: [...this.path, index],
+                                isArrayItem: true
+                            });
                         }
                     });
                 } else {
-                    // For objects, process properties
                     Object.entries(this.node).forEach(([key, value]) => {
                         if (key === 'items' && Array.isArray(value)) {
-                            // If this is an "items" array property, add its children directly
                             value.forEach((item, index) => {
                                 if (!this.isLeafNode(item)) {
                                     const itemTitle = (item && typeof item === 'object' && item.title) 
                                         ? item.title 
                                         : `Item ${index + 1}`;
                                     
-                                    const childCount = this.getChildCount(item);
                                     children.push({
                                         key: `${key}_${index}`,
                                         value: item,
                                         displayName: itemTitle,
                                         path: [...this.path, key, index],
-                                        isArrayItem: true,
-                                        childCount: childCount
+                                        isArrayItem: true
                                     });
                                 }
                             });
                         } else if (!this.isLeafNode(value)) {
-                            // Regular property
-                            let displayName = key;
-                            if (Array.isArray(value)) {
-                                const childCount = this.getChildCount(value);
-                                displayName = childCount > 0 ? `${key} (${childCount})` : key;
-                            } else if (typeof value === 'object' && value !== null) {
-                                const childCount = this.getChildCount(value);
-                                displayName = childCount > 0 ? `${key} (${childCount})` : key;
-                            }
-                            
                             children.push({
                                 key,
                                 value,
-                                displayName: displayName,
+                                displayName: key,
                                 path: [...this.path, key],
                                 isArrayItem: false
                             });
@@ -378,28 +593,6 @@
             }
         },
         methods: {
-            getChildCount(node) {
-                if (!node || typeof node !== 'object') return 0;
-                
-                if (Array.isArray(node)) {
-                    // For arrays, count non-leaf items
-                    return node.filter(item => !this.isLeafNode(item)).length;
-                } else {
-                    // For objects, count properties except "items" which we'll handle specially
-                    const count = Object.entries(node).reduce((acc, [key, value]) => {
-                        if (key === 'items' && Array.isArray(value)) {
-                            // For "items" array, count its non-leaf children
-                            return acc + value.filter(item => !this.isLeafNode(item)).length;
-                        } else if (!this.isLeafNode(value)) {
-                            // For other properties, count if non-leaf
-                            return acc + 1;
-                        }
-                        return acc;
-                    }, 0);
-                    
-                    return count;
-                }
-            },
             toggle() {
                 if (this.hasChildren) {
                     this.expanded = !this.expanded;
@@ -425,19 +618,16 @@
 
                 const keys = Object.keys(node);
                 
-                // First priority: fields ending with "name"
                 let nameField = keys.find(key => key.toLowerCase().endsWith('name'));
                 if (nameField && node[nameField]) {
                     return String(node[nameField]);
                 }
                 
-                // Second priority: fields ending with "title"
                 let titleField = keys.find(key => key.toLowerCase().endsWith('title'));
                 if (titleField && node[titleField]) {
                     return String(node[titleField]);
                 }
                 
-                // Third priority: fields ending with "id"
                 let idField = keys.find(key => key.toLowerCase().endsWith('id'));
                 if (idField && node[idField]) {
                     return String(node[idField]);
@@ -446,7 +636,6 @@
                 return '';
             },
             isLeafNode(node) {
-                // A leaf node is a primitive value or an empty object/array
                 if (node === null || node === undefined) return true;
                 if (typeof node !== 'object') return true;
                 if (Array.isArray(node) && node.length === 0) return true;
@@ -459,7 +648,7 @@
                 <div 
                     class="tree-node flex items-center py-2 px-2 rounded cursor-pointer"
                     :class="{ 'bg-gray-100 border-l-4 border-black': isSelected }"
-                    :style="{ paddingLeft: (level * 20 + 8) + 'px' }"
+                    :style="{ paddingLeft: '8px' }"
                     @click="selectThis"
                 >
                     <button 
@@ -529,47 +718,69 @@
                 if (typeof this.node === 'boolean') return 'Boolean';
                 return 'Unknown';
             },
-            leafNodes() {
+            specialFields() {
+                if (!this.isObject) return {};
+                
+                const fields = {};
+                const entries = Object.entries(this.node);
+                
+                entries.forEach(([key, value]) => {
+                    const fieldType = this.getFieldType(key, value);
+                    if (fieldType !== 'normal') {
+                        fields[key] = {
+                            type: fieldType,
+                            value: value,
+                            key: key
+                        };
+                    }
+                });
+                
+                return fields;
+            },
+            normalFields() {
                 if (!this.isObject && !this.isArray) return [];
                 
-                const leaves = [];
+                const fields = [];
                 
                 if (this.isArray) {
                     this.node.forEach((item, index) => {
                         if (this.isLeafNode(item)) {
-                            leaves.push({
+                            fields.push({
                                 key: index,
                                 displayName: `Item ${index + 1}`,
                                 value: item,
-                                originalKey: index
+                                originalKey: index,
+                                type: 'normal'
                             });
                         }
                     });
                 } else {
                     Object.entries(this.node).forEach(([key, value]) => {
                         if (key !== 'items' && this.isLeafNode(value)) {
-                            leaves.push({
-                                key,
-                                displayName: key,
-                                value,
-                                originalKey: key
-                            });
+                            const fieldType = this.getFieldType(key, value);
+                            if (fieldType === 'normal') {
+                                fields.push({
+                                    key,
+                                    displayName: key,
+                                    value,
+                                    originalKey: key,
+                                    type: 'normal'
+                                });
+                            }
                         }
                     });
                 }
                 
-                return leaves;
+                return fields;
             },
             nonLeafNodes() {
                 if (!this.isObject && !this.isArray) return [];
                 
                 const branches = [];
                 
-                // First, add direct non-leaf children that are not "items"
                 if (this.isArray) {
                     this.node.forEach((item, index) => {
                         if (!this.isLeafNode(item)) {
-                            // Get the title from the item if it exists, otherwise use index
                             const itemTitle = (item && typeof item === 'object' && item.title) 
                                 ? item.title 
                                 : `Item ${index + 1}`;
@@ -580,8 +791,7 @@
                                 value: item,
                                 caption: this.findNodeCaption(item),
                                 originalKey: index,
-                                isArrayItem: true,
-                                childCount: this.getChildCount(item)
+                                isArrayItem: true
                             });
                         }
                     });
@@ -594,14 +804,12 @@
                                 value,
                                 caption: this.findNodeCaption(value),
                                 originalKey: key,
-                                isArrayItem: false,
-                                childCount: this.getChildCount(value)
+                                isArrayItem: false
                             });
                         }
                     });
                 }
                 
-                // Then, if there's an "items" property and it's an array, add its children directly
                 if (this.isObject && this.node.items && Array.isArray(this.node.items)) {
                     this.node.items.forEach((item, index) => {
                         if (!this.isLeafNode(item)) {
@@ -615,41 +823,200 @@
                                 value: item,
                                 caption: this.findNodeCaption(item),
                                 originalKey: ['items', index],
-                                isArrayItem: true,
-                                childCount: this.getChildCount(item)
+                                isArrayItem: true
                             });
                         }
                     });
                 }
                 
                 return branches;
-            },
-            hasTags() {
-                return this.isObject && this.node.tags && typeof this.node.tags === 'string';
-            },
-            parsedTags() {
-                if (!this.hasTags) return [];
-                
-                return this.parseTags(this.node.tags);
             }
         },
         methods: {
+            getFieldType(key, value) {
+                const keyLower = key.toLowerCase();
+                
+                // ID fields
+                if (keyLower === 'id' || keyLower.endsWith('id')) {
+                    return 'id';
+                }
+                
+                // Title/Name fields (for headings)
+                if (keyLower === 'title' || keyLower === 'name' || 
+                    keyLower.endsWith('title') || keyLower.endsWith('name')) {
+                    return 'heading';
+                }
+                
+                // Content fields (check for markdown)
+                if (keyLower === 'content' || keyLower === 'description' || 
+                    keyLower === 'body' || keyLower === 'text') {
+                    if (typeof value === 'string' && this.isMarkdown(value)) {
+                        return 'markdown';
+                    }
+                    return 'content';
+                }
+                
+                // Date fields
+                if (typeof value === 'string' && this.isDate(value)) {
+                    return 'date';
+                }
+                
+                // Numeric fields
+                if (typeof value === 'number') {
+                    return 'number';
+                }
+                
+                // Tags
+                if (keyLower === 'tags' && typeof value === 'string') {
+                    return 'tags';
+                }
+                
+                return 'normal';
+            },
+            renderSpecialField(field) {
+                switch (field.type) {
+                    case 'id':
+                        return `<span class="field-id">${field.value}</span>`;
+                    case 'heading':
+                        return `<h3 class="field-heading text-xl font-semibold text-gray-900">${field.value}</h3>`;
+                    case 'markdown':
+                        return `<div class="markdown-content">${marked.parse(field.value)}</div>`;
+                    case 'content':
+                        return `<div class="whitespace-pre-wrap">${field.value}</div>`;
+                    case 'date':
+                        return `<div class="flex items-center space-x-2">
+                            <i data-lucide="calendar" class="w-4 h-4 text-gray-500"></i>
+                            <span>${this.formatDate(field.value)}</span>
+                            <span class="text-xs text-gray-500">(${field.value})</span>
+                        </div>`;
+                    case 'number':
+                        return `<div class="flex items-center space-x-2">
+                            <i data-lucide="hash" class="w-4 h-4 text-gray-500"></i>
+                            <span class="font-mono">${this.formatNumber(field.value)}</span>
+                        </div>`;
+                    case 'tags':
+                        const tags = this.parseTags(field.value);
+                        return tags.map(tag => {
+                            const tagClass = this.getTagClass(tag);
+                            if (tag.type === 'relation') {
+                                return `<span class="tag ${tagClass}" style="cursor: pointer;">${tag.relationType} » ${tag.target}</span>`;
+                            } else {
+                                return `<span class="tag ${tagClass}">${tag.type}::${tag.value}</span>`;
+                            }
+                        }).join('');
+                    default:
+                        return String(field.value);
+                }
+            },
+            isDate(str) {
+                return !isNaN(Date.parse(str)) && /\d{4}-\d{2}-\d{2}/.test(str);
+            },
+            isEmail(str) {
+                return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
+            },
+            isUrl(str) {
+                try {
+                    new URL(str);
+                    return true;
+                } catch {
+                    return false;
+                }
+            },
+            isMarkdown(str) {
+                if (typeof str !== 'string' || str.length < 10) return false;
+                
+                // Check for common markdown patterns
+                const markdownPatterns = [
+                    /#{1,6}\s+.+/,           // Headers
+                    /\*\*.*?\*\*/,           // Bold
+                    /\*.*?\*/,               // Italic
+                    /`.*?`/,                 // Inline code
+                    /\`\`\`[\s\S]*?\`\`\`/,        // Code blocks
+                    /\[.*?\]$$.*?$$/,        // Links
+                    /^\s*[-*+]\s+/m,         // Unordered lists
+                    /^\s*\d+\.\s+/m,         // Ordered lists
+                    /^\s*>\s+/m              // Blockquotes
+                ];
+                
+                return markdownPatterns.some(pattern => pattern.test(str));
+            },
+            formatDate(str) {
+                return new Date(str).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            },
+            formatNumber(num) {
+                return new Intl.NumberFormat('en-US').format(num);
+            },
+            isLeafNode(node) {
+                if (node === null || node === undefined) return true;
+                if (typeof node !== 'object') return true;
+                if (Array.isArray(node) && node.length === 0) return true;
+                if (!Array.isArray(node) && Object.keys(node).length === 0) return true;
+                return false;
+            },
+            findNodeCaption(node) {
+                if (!node || typeof node !== 'object' || Array.isArray(node)) {
+                    return '';
+                }
+
+                const keys = Object.keys(node);
+                
+                let nameField = keys.find(key => key.toLowerCase().endsWith('name'));
+                if (nameField && node[nameField]) {
+                    return String(node[nameField]);
+                }
+                
+                let titleField = keys.find(key => key.toLowerCase().endsWith('title'));
+                if (titleField && node[titleField]) {
+                    return String(node[titleField]);
+                }
+                
+                let idField = keys.find(key => key.toLowerCase().endsWith('id'));
+                if (idField && node[idField]) {
+                    return String(node[idField]);
+                }
+                
+                return '';
+            },
+            navigateToChild(child) {
+                if (Array.isArray(child.originalKey)) {
+                    this.$emit('select', child.value, [...this.path, ...child.originalKey]);
+                } else {
+                    this.$emit('select', child.value, [...this.path, child.originalKey]);
+                }
+            },
+            getIdField() {
+                if (!this.isObject) return null;
+                const keys = Object.keys(this.node);
+                const idField = keys.find(key => key.toLowerCase() === 'id' || key.toLowerCase().endsWith('id'));
+                return idField ? this.node[idField] : null;
+            },
+            getChildCount(node) {
+                if (Array.isArray(node)) {
+                    return node.length;
+                } else if (typeof node === 'object' && node !== null) {
+                    return Object.keys(node).length;
+                } else {
+                    return 0;
+                }
+            },
             parseTags(tagsString) {
                 if (!tagsString) return [];
                 
-                // Split by commas and trim each tag
                 const tagStrings = tagsString.split(',').map(tag => tag.trim());
                 
-                // Parse each tag into an object with type and value
                 return tagStrings.map(tag => {
-                    // Check if tag follows the tipo::valor format
                     const match = tag.match(/^([^:]+)::(.+)$/);
                     
                     if (match) {
                         const type = match[1].trim();
                         const value = match[2].trim();
                         
-                        // Check if it's a relation tag with the format relation::tipo>>elemento_referenciado
                         if (type === 'relation') {
                             const relationMatch = value.match(/^([^>]+)>>(.+)$/);
                             if (relationMatch) {
@@ -669,245 +1036,90 @@
                         };
                     }
                     
-                    // If tag doesn't follow the format, return it as is with default type
                     return {
-                        type: 'default',
+                        type: 'custom',
                         value: tag,
                         full: tag
                     };
                 });
             },
+
             getTagClass(tag) {
                 const validTypes = ['type', 'priority', 'status', 'relation'];
                 return validTypes.includes(tag.type) ? `tag-${tag.type}` : 'tag-default';
-            },
-            handleRelationClick(tag) {
-                if (tag.type === 'relation' && tag.target) {
-                    this.$emit('navigate-relation', tag.target);
-                }
-            },
-            getChildCount(node) {
-                if (!node || typeof node !== 'object') return 0;
-                
-                let count = 0;
-                
-                if (Array.isArray(node)) {
-                    count = node.filter(item => !this.isLeafNode(item)).length;
-                } else {
-                    // Count non-leaf properties
-                    Object.entries(node).forEach(([key, value]) => {
-                        if (key === 'items' && Array.isArray(value)) {
-                            // For "items" array, count its non-leaf children
-                            count += value.filter(item => !this.isLeafNode(item)).length;
-                        } else if (!this.isLeafNode(value)) {
-                            // For other properties, count if non-leaf
-                            count += 1;
-                        }
-                    });
-                }
-                
-                return count;
-            },
-            isDate(str) {
-                return !isNaN(Date.parse(str)) && /\d{4}-\d{2}-\d{2}/.test(str);
-            },
-            isEmail(str) {
-                return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
-            },
-            isUrl(str) {
-                try {
-                    new URL(str);
-                    return true;
-                } catch {
-                    return false;
-                }
-            },
-            isMarkdown(str) {
-                return /[#*_`\[\](){}]/.test(str) && str.length > 50;
-            },
-            formatDate(str) {
-                return new Date(str).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-            },
-            formatNumber(num) {
-                return new Intl.NumberFormat('en-US').format(num);
-            },
-            renderMarkdown(text) {
-                return text
-                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                    .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 rounded">$1</code>')
-                    .replace(/\n/g, '<br>');
-            },
-            isLeafNode(node) {
-                // A leaf node is a primitive value or an empty object/array
-                if (node === null || node === undefined) return true;
-                if (typeof node !== 'object') return true;
-                if (Array.isArray(node) && node.length === 0) return true;
-                if (!Array.isArray(node) && Object.keys(node).length === 0) return true;
-                return false;
-            },
-            findNodeCaption(node) {
-                if (!node || typeof node !== 'object' || Array.isArray(node)) {
-                    return '';
-                }
-
-                const keys = Object.keys(node);
-                
-                // First priority: fields ending with "name"
-                let nameField = keys.find(key => key.toLowerCase().endsWith('name'));
-                if (nameField && node[nameField]) {
-                    return String(node[nameField]);
-                }
-                
-                // Second priority: fields ending with "title"
-                let titleField = keys.find(key => key.toLowerCase().endsWith('title'));
-                if (titleField && node[titleField]) {
-                    return String(node[titleField]);
-                }
-                
-                // Third priority: fields ending with "id"
-                let idField = keys.find(key => key.toLowerCase().endsWith('id'));
-                if (idField && node[idField]) {
-                    return String(node[idField]);
-                }
-                
-                return '';
-            },
-            navigateToChild(child) {
-                // Handle array paths for items
-                if (Array.isArray(child.originalKey)) {
-                    this.$emit('select', child.value, [...this.path, ...child.originalKey]);
-                } else {
-                    this.$emit('select', child.value, [...this.path, child.originalKey]);
-                }
             }
         },
         template: `
             <div class="space-y-6">
-                <!-- Type Badge -->
-                <div class="flex items-center space-x-2">
-                    <span class="px-3 py-1 bg-gray-100 text-gray-800 text-sm font-medium rounded-full">
-                        {{ nodeType }}
-                    </span>
-                    <span v-if="isArray" class="text-sm text-gray-500">
-                        {{ node.length }} items
-                    </span>
-                    <span v-else-if="isObject" class="text-sm text-gray-500">
-                        {{ Object.keys(node).length }} properties
-                    </span>
+                <!-- Special Fields Rendering -->
+                <div v-if="isObject" class="space-y-4">
+                    <template v-for="(field, key) in specialFields" :key="key">
+                        <!-- ID Field (discrete) -->
+                        <div v-if="field.type === 'id'" class="flex items-center space-x-2">
+                            <span class="text-sm text-gray-600">{{ field.key }}:</span>
+                            <span v-html="renderSpecialField(field)"></span>
+                        </div>
+                        
+                        <!-- Heading Field -->
+                        <div v-else-if="field.type === 'heading'" v-html="renderSpecialField(field)"></div>
+                        
+                        <!-- Markdown Content -->
+                        <div v-else-if="field.type === 'markdown'" class="space-y-2">
+                            <h4 class="text-sm font-medium text-gray-700">{{ field.key }}</h4>
+                            <div v-html="renderSpecialField(field)"></div>
+                        </div>
+                        
+                        <!-- Regular Content -->
+                        <div v-else-if="field.type === 'content'" class="space-y-2">
+                            <h4 class="text-sm font-medium text-gray-700">{{ field.key }}</h4>
+                            <div v-html="renderSpecialField(field)"></div>
+                        </div>
+                        
+                        <!-- Date Field (compact) -->
+                        <div v-else-if="field.type === 'date'" class="field-compact">
+                            <span class="field-label">{{ field.key }}:</span>
+                            <div v-html="renderSpecialField(field)"></div>
+                        </div>
+                        
+                        <!-- Number Field (compact) -->
+                        <div v-else-if="field.type === 'number'" class="field-compact">
+                            <span class="field-label">{{ field.key }}:</span>
+                            <div v-html="renderSpecialField(field)"></div>
+                        </div>
+                        
+                        <!-- Tags Field -->
+                        <div v-else-if="field.type === 'tags'" class="space-y-2">
+                            <h4 class="text-sm font-medium text-gray-700">{{ field.key }}</h4>
+                            <div class="flex flex-wrap gap-2" v-html="renderSpecialField(field)"></div>
+                        </div>
+                    </template>
                 </div>
 
-                <!-- Tags Section -->
-                <div v-if="hasTags" class="space-y-2">
-                    <h3 class="text-md font-medium text-gray-900">Tags</h3>
-                    <div class="flex flex-wrap gap-2">
-                        <span 
-                            v-for="(tag, index) in parsedTags" 
-                            :key="index"
-                            :class="['tag', getTagClass(tag)]"
-                            @click="tag.type === 'relation' && handleRelationClick(tag)"
-                        >
-                            <span v-if="tag.type === 'relation'">
-                                {{ tag.relationType }} » {{ tag.target }}
-                            </span>
-                            <span v-else>
-                                {{ tag.type }}::{{ tag.value }}
-                            </span>
-                        </span>
-                    </div>
-                </div>
-
-                <!-- Leaf Nodes Section -->
-                <div v-if="leafNodes.length > 0" class="space-y-4">
-                    <h3 v-if="nonLeafNodes.length > 0" class="text-md font-medium text-gray-900">Properties</h3>
+                <!-- Normal Fields Section -->
+                <div v-if="normalFields.length > 0" class="space-y-4">
+                    <h3 v-if="Object.keys(specialFields).length > 0" class="text-md font-medium text-gray-900">Other Properties</h3>
                     <div class="bg-gray-50 rounded-lg p-4">
-                        <div class="grid grid-cols-1 gap-4">
-                            <div v-for="(leaf, index) in leafNodes" :key="index" 
-                                 class="bg-white p-3 rounded border border-gray-200"
+                        <div class="space-y-3">
+                            <div v-for="(field, index) in normalFields" :key="index" 
+                                 class="field-compact"
                                  :class="{ 'array-item': isArray }">
-                                <div class="font-medium text-sm text-gray-700 mb-2">
-                                    {{ leaf.displayName }}
-                                </div>
-                                
-                                <!-- String Content -->
-                                <div v-if="typeof leaf.value === 'string'">
-                                    <!-- Tags -->
-                                    <div v-if="leaf.key === 'tags'" class="flex flex-wrap gap-2">
-                                        <span 
-                                            v-for="(tag, tagIndex) in parseTags(leaf.value)" 
-                                            :key="tagIndex"
-                                            :class="['tag', getTagClass(tag)]"
-                                            @click="tag.type === 'relation' && handleRelationClick(tag)"
-                                        >
-                                            <span v-if="tag.type === 'relation'">
-                                                {{ tag.relationType }} » {{ tag.target }}
-                                            </span>
-                                            <span v-else>
-                                                {{ tag.type }}::{{ tag.value }}
-                                            </span>
-                                        </span>
-                                    </div>
-                                    
-                                    <!-- Date -->
-                                    <div v-else-if="isDate(leaf.value)" class="flex items-center space-x-3">
-                                        <i data-lucide="calendar" class="w-4 h-4 text-gray-700"></i>
-                                        <div>
-                                            <div class="font-medium">{{ formatDate(leaf.value) }}</div>
-                                            <div class="text-xs text-gray-500">{{ leaf.value }}</div>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Email -->
-                                    <div v-else-if="isEmail(leaf.value)" class="flex items-center space-x-3">
-                                        <i data-lucide="mail" class="w-4 h-4 text-gray-700"></i>
-                                        <a :href="'mailto:' + leaf.value" class="text-gray-900 hover:underline">{{ leaf.value }}</a>
-                                    </div>
-                                    
-                                    <!-- URL -->
-                                    <div v-else-if="isUrl(leaf.value)" class="flex items-center space-x-3">
-                                        <i data-lucide="external-link" class="w-4 h-4 text-gray-700"></i>
-                                        <a :href="leaf.value" target="_blank" class="text-gray-900 hover:underline">{{ leaf.value }}</a>
-                                    </div>
-                                    
-                                    <!-- Markdown -->
-                                    <div v-else-if="isMarkdown(leaf.value)" class="prose prose-sm max-w-none">
-                                        <div v-html="renderMarkdown(leaf.value)"></div>
-                                    </div>
-                                    
-                                    <!-- Regular Text -->
-                                    <div v-else class="flex items-start space-x-3">
-                                        <i data-lucide="type" class="w-4 h-4 text-gray-500 mt-0.5"></i>
-                                        <div class="whitespace-pre-wrap">{{ leaf.value }}</div>
-                                    </div>
-                                </div>
-
-                                <!-- Number Content -->
-                                <div v-else-if="typeof leaf.value === 'number'" class="flex items-center space-x-3">
-                                    <i data-lucide="hash" class="w-4 h-4 text-gray-700"></i>
-                                    <div class="text-lg font-mono">{{ formatNumber(leaf.value) }}</div>
-                                </div>
-
-                                <!-- Boolean Content -->
-                                <div v-else-if="typeof leaf.value === 'boolean'" class="flex items-center space-x-3">
-                                    <i :data-lucide="leaf.value ? 'check-circle' : 'x-circle'" 
-                                       class="w-4 h-4 text-gray-700"></i>
-                                    <div class="font-medium">
-                                        {{ leaf.value ? 'True' : 'False' }}
-                                    </div>
-                                </div>
-                                
-                                <!-- Empty Object/Array -->
-                                <div v-else-if="typeof leaf.value === 'object'" class="flex items-center space-x-3">
-                                    <i :data-lucide="Array.isArray(leaf.value) ? 'list' : 'folder'" class="w-4 h-4 text-gray-500"></i>
-                                    <div class="text-gray-500">
-                                        {{ Array.isArray(leaf.value) ? 'Empty array' : 'Empty object' }}
-                                    </div>
+                                <span class="field-label">{{ field.displayName }}:</span>
+                                <div class="field-value">
+                                    <!-- String Content -->
+                                    <span v-if="typeof field.value === 'string'">
+                                        <!-- Email -->
+                                        <a v-if="isEmail(field.value)" :href="'mailto:' + field.value" class="text-blue-600 hover:underline">{{ field.value }}</a>
+                                        <!-- URL -->
+                                        <a v-else-if="isUrl(field.value)" :href="field.value" target="_blank" class="text-blue-600 hover:underline">{{ field.value }}</a>
+                                        <!-- Regular Text -->
+                                        <span v-else>{{ field.value }}</span>
+                                    </span>
+                                    <!-- Boolean Content -->
+                                    <span v-else-if="typeof field.value === 'boolean'" class="font-medium">
+                                        {{ field.value ? 'True' : 'False' }}
+                                    </span>
+                                    <!-- Other types -->
+                                    <span v-else>{{ field.value }}</span>
                                 </div>
                             </div>
                         </div>
@@ -916,7 +1128,7 @@
 
                 <!-- Non-Leaf Nodes Section -->
                 <div v-if="nonLeafNodes.length > 0" class="space-y-4">
-                    <h3 v-if="leafNodes.length > 0" class="text-md font-medium text-gray-900">Sub-items</h3>
+                    <h3 class="text-md font-medium text-gray-900">Sub-items</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div v-for="(branch, index) in nonLeafNodes" :key="index" 
                              class="bg-white p-4 rounded border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer"
@@ -926,27 +1138,8 @@
                                 <i :data-lucide="Array.isArray(branch.value) ? 'folder' : 'folder'" class="w-5 h-5 text-gray-700"></i>
                                 <div class="font-medium text-gray-900">
                                     {{ branch.displayName }}
-                                    <span class="text-xs text-gray-500">({{ branch.childCount }})</span>
                                 </div>
-                                <span v-if="branch.caption" class="text-xs text-gray-500">
-                                    ({{ branch.caption }})
-                                </span>
-                            </div>
-                            
-                            <!-- Show tags if present -->
-                            <div v-if="branch.value && branch.value.tags" class="mt-2 flex flex-wrap gap-1">
-                                <span 
-                                    v-for="(tag, tagIndex) in parseTags(branch.value.tags)" 
-                                    :key="tagIndex"
-                                    :class="['tag text-xs py-0.5 px-2', getTagClass(tag)]"
-                                >
-                                    <span v-if="tag.type === 'relation'">
-                                        {{ tag.relationType }}»{{ tag.target }}
-                                    </span>
-                                    <span v-else>
-                                        {{ tag.value }}
-                                    </span>
-                                </span>
+                                <span class="text-xs text-gray-500">({{ getChildCount(branch.value) }})</span>
                             </div>
                         </div>
                     </div>
@@ -978,9 +1171,7 @@
                         </div>
                         
                         <!-- Markdown -->
-                        <div v-else-if="isMarkdown(node)" class="prose prose-sm max-w-none">
-                            <div v-html="renderMarkdown(node)"></div>
-                        </div>
+                        <div v-else-if="isMarkdown(node)" class="markdown-content" v-html="marked.parse(node)"></div>
                         
                         <!-- Regular Text -->
                         <div v-else class="flex items-start space-x-3">
@@ -1016,9 +1207,11 @@
         },
         data() {
             return {
+                config: APP_CONFIG,
                 jsonData: null,
                 selectedNode: null,
-                selectedPath: []
+                selectedPath: [],
+                isDragOver: false
             }
         },
         computed: {
@@ -1039,21 +1232,161 @@
             }
         },
         methods: {
+            getNodeType() {
+                if (Array.isArray(this.selectedNode)) return 'Array';
+                if (typeof this.selectedNode === 'object' && this.selectedNode !== null) return 'Object';
+                if (typeof this.selectedNode === 'string') return 'String';
+                if (typeof this.selectedNode === 'number') return 'Number';
+                if (typeof this.selectedNode === 'boolean') return 'Boolean';
+                return 'Unknown';
+            },
+            getNodeIcon() {
+                if (Array.isArray(this.selectedNode)) return 'list';
+                if (typeof this.selectedNode === 'object' && this.selectedNode !== null) return 'folder';
+                if (typeof this.selectedNode === 'string') return 'type';
+                if (typeof this.selectedNode === 'number') return 'hash';
+                if (typeof this.selectedNode === 'boolean') return 'toggle-left';
+                return 'file';
+            },
+            getPropertyCount() {
+                if (Array.isArray(this.selectedNode)) return this.selectedNode.length;
+                if (typeof this.selectedNode === 'object' && this.selectedNode !== null) return Object.keys(this.selectedNode).length;
+                return 0;
+            },
+            getNodeId() {
+                if (typeof this.selectedNode === 'object' && this.selectedNode !== null && !Array.isArray(this.selectedNode)) {
+                    const keys = Object.keys(this.selectedNode);
+                    const idField = keys.find(key => key.toLowerCase() === 'id' || key.toLowerCase().endsWith('id'));
+                    return idField ? this.selectedNode[idField] : null;
+                }
+                return null;
+            },
+            getNodeTags() {
+                if (typeof this.selectedNode === 'object' && this.selectedNode !== null && !Array.isArray(this.selectedNode) && this.selectedNode.tags) {
+                    return this.parseTags(this.selectedNode.tags);
+                }
+                return [];
+            },
+            isObject() {
+                return typeof this.selectedNode === 'object' && this.selectedNode !== null && !Array.isArray(this.selectedNode);
+            },
+            isArray() {
+                return Array.isArray(this.selectedNode);
+            },
+            parseTags(tagsString) {
+                if (!tagsString) return [];
+                
+                const tagStrings = tagsString.split(',').map(tag => tag.trim());
+                
+                return tagStrings.map(tag => {
+                    const match = tag.match(/^([^:]+)::(.+)$/);
+                    
+                    if (match) {
+                        const type = match[1].trim();
+                        const value = match[2].trim();
+                        
+                        if (type === 'relation') {
+                            const relationMatch = value.match(/^([^>]+)>>(.+)$/);
+                            if (relationMatch) {
+                                return {
+                                    type: 'relation',
+                                    relationType: relationMatch[1].trim(),
+                                    target: relationMatch[2].trim(),
+                                    full: tag
+                                };
+                            }
+                        }
+                        
+                        return {
+                            type,
+                            value,
+                            full: tag
+                        };
+                    }
+                    
+                    return {
+                        type: 'custom',
+                        value: tag,
+                        full: tag
+                    };
+                });
+            },
+            getTagClass(tag) {
+                const validTypes = ['type', 'priority', 'status', 'relation'];
+                const baseClasses = 'bg-opacity-10 border border-opacity-20';
+                
+                switch(tag.type) {
+                    case 'type': return `${baseClasses} bg-blue-500 text-blue-600 border-blue-500`;
+                    case 'priority': return `${baseClasses} bg-yellow-500 text-yellow-600 border-yellow-500`;
+                    case 'status': return `${baseClasses} bg-green-500 text-green-600 border-green-500`;
+                    case 'relation': return `${baseClasses} bg-purple-500 text-purple-600 border-purple-500 cursor-pointer`;
+                    default: return `${baseClasses} bg-gray-500 text-gray-600 border-gray-500`;
+                }
+            },
+            async loadDefaultFile() {
+                if (!this.config.defaultFile) return;
+                
+                try {
+                    let response;
+                    if (this.config.defaultFile.startsWith('http')) {
+                        response = await fetch(this.config.defaultFile);
+                    } else {
+                        response = await fetch(this.config.defaultFile);
+                    }
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const text = await response.text();
+                    this.jsonData = JSON.parse(text);
+                    this.selectedNode = this.jsonData;
+                    this.selectedPath = [];
+                } catch (error) {
+                    console.error('Error loading default file:', error);
+                    alert('Error loading default file: ' + error.message);
+                }
+            },
             handleFileUpload(event) {
                 const file = event.target.files[0];
                 if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        try {
-                            this.jsonData = JSON.parse(e.target.result);
-                            this.selectedNode = this.jsonData;
-                            this.selectedPath = [];
-                        } catch (error) {
-                            alert('Error reading JSON file. Please verify that the format is correct.');
-                        }
-                    };
-                    reader.readAsText(file);
+                    this.processFile(file);
                 }
+            },
+            handleDragOver(event) {
+                event.preventDefault();
+                this.isDragOver = true;
+            },
+            handleDragLeave(event) {
+                event.preventDefault();
+                this.isDragOver = false;
+            },
+            handleDrop(event) {
+                event.preventDefault();
+                this.isDragOver = false;
+                
+                const files = event.dataTransfer.files;
+                if (files.length > 0) {
+                    const file = files[0];
+                    if (file.type === 'application/json' || file.name.endsWith('.json')) {
+                        this.processFile(file);
+                    } else {
+                        alert('Please select a valid JSON file.');
+                    }
+                }
+            },
+            processFile(file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        this.jsonData = JSON.parse(e.target.result);
+                        this.selectedNode = this.jsonData;
+                        this.selectedPath = [];
+                    } catch (error) {
+                        alert('Error reading JSON file. Please verify that the format is correct.');
+                    }
+                };
+                reader.readAsText(file);
             },
             selectNode(node, path) {
                 this.selectedNode = node;
@@ -1093,19 +1426,16 @@
 
                 const keys = Object.keys(node);
                 
-                // First priority: fields ending with "name"
                 let nameField = keys.find(key => key.toLowerCase().endsWith('name'));
                 if (nameField && node[nameField]) {
                     return String(node[nameField]);
                 }
                 
-                // Second priority: fields ending with "title"
                 let titleField = keys.find(key => key.toLowerCase().endsWith('title'));
                 if (titleField && node[titleField]) {
                     return String(node[titleField]);
                 }
                 
-                // Third priority: fields ending with "id"
                 let idField = keys.find(key => key.toLowerCase().endsWith('id'));
                 if (idField && node[idField]) {
                     return String(node[idField]);
@@ -1114,14 +1444,11 @@
                 return '';
             },
             navigateToRelation(targetName) {
-                // This function will search for a node with the given title/name
-                // and navigate to it if found
                 this.findNodeByTitle(this.jsonData, [], targetName);
             },
             findNodeByTitle(node, path, targetName) {
                 if (!node || typeof node !== 'object') return false;
                 
-                // Check if current node has a title/name that matches
                 if (typeof node === 'object' && !Array.isArray(node)) {
                     const title = node.title || node.name;
                     if (title === targetName) {
@@ -1130,7 +1457,6 @@
                     }
                 }
                 
-                // Recursively search in children
                 if (Array.isArray(node)) {
                     for (let i = 0; i < node.length; i++) {
                         const found = this.findNodeByTitle(node[i], [...path, i], targetName);
@@ -1174,7 +1500,6 @@
                 if (typeof level === 'undefined') level = 1;
                 let content = '#'.repeat(level) + ' ' + title + '\n\n';
                 
-                // Add tags if present
                 if (node && typeof node === 'object' && !Array.isArray(node) && node.tags) {
                     content += '**Tags:** ' + node.tags + '\n\n';
                 }
@@ -1187,7 +1512,7 @@
                         });
                     } else {
                         Object.entries(node).forEach(([key, value]) => {
-                            if (key !== 'tags') { // Skip tags as we've already added them
+                            if (key !== 'tags') {
                                 content += '#'.repeat(level + 1) + ' ' + key + '\n\n';
                                 content += this.formatValueForMarkdown(value) + '\n\n';
                             }
@@ -1210,7 +1535,6 @@
             generateHTMLContent(node, title, level) {
                 let content = '<h' + level + ' id="' + this.slugify(title) + '">' + title + '</h' + level + '>';
                 
-                // Add tags if present
                 if (node && typeof node === 'object' && !Array.isArray(node) && node.tags) {
                     content += '<div class="tags">';
                     const tags = this.parseTags(node.tags);
@@ -1235,7 +1559,7 @@
                         });
                     } else {
                         Object.entries(node).forEach(([key, value]) => {
-                            if (key !== 'tags') { // Skip tags as we've already added them
+                            if (key !== 'tags') {
                                 content += this.generateHTMLContent(value, key, level + 1);
                             }
                         });
@@ -1245,53 +1569,6 @@
                 }
                 
                 return content;
-            },
-            parseTags(tagsString) {
-                if (!tagsString) return [];
-                
-                // Split by commas and trim each tag
-                const tagStrings = tagsString.split(',').map(tag => tag.trim());
-                
-                // Parse each tag into an object with type and value
-                return tagStrings.map(tag => {
-                    // Check if tag follows the tipo::valor format
-                    const match = tag.match(/^([^:]+)::(.+)$/);
-                    
-                    if (match) {
-                        const type = match[1].trim();
-                        const value = match[2].trim();
-                        
-                        // Check if it's a relation tag with the format relation::tipo>>elemento_referenciado
-                        if (type === 'relation') {
-                            const relationMatch = value.match(/^([^>]+)>>(.+)$/);
-                            if (relationMatch) {
-                                return {
-                                    type: 'relation',
-                                    relationType: relationMatch[1].trim(),
-                                    target: relationMatch[2].trim(),
-                                    full: tag
-                                };
-                            }
-                        }
-                        
-                        return {
-                            type,
-                            value,
-                            full: tag
-                        };
-                    }
-                    
-                    // If tag doesn't follow the format, return it as is with default type
-                    return {
-                        type: 'default',
-                        value: tag,
-                        full: tag
-                    };
-                });
-            },
-            getTagClass(tag) {
-                const validTypes = ['type', 'priority', 'status', 'relation'];
-                return validTypes.includes(tag.type) ? `tag-${tag.type}` : 'tag-default';
             },
             formatValueForMarkdown(value) {
                 if (typeof value === 'string') {
@@ -1348,9 +1625,14 @@
                 return new Intl.NumberFormat('en-US').format(num);
             }
         },
-        mounted() {
+        async mounted() {
             // Initialize Lucide icons
             lucide.createIcons();
+            
+            // Load default file if specified
+            if (this.config.defaultFile) {
+                await this.loadDefaultFile();
+            }
         },
         updated() {
             // Re-initialize icons after DOM updates
