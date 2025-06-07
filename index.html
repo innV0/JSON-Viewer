@@ -222,16 +222,16 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
 </style>
 </head>
 <body class="bg-white">
-<div id="app" v-cloak>
+<div id="app" class="json-explorer-app" v-cloak>
     <!-- Header -->
-    <header v-if="config.showHeader" class="bg-white border-b border-gray-200">
+    <header id="main-header" v-if="config.showHeader" class="app-header bg-white border-b border-gray-200">
         <div class="max-w-7xl mx-auto px-4 py-4">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-3">
                     <div class="logo-container">
                         <img :src="config.logoUrl" :alt="config.appName + ' Logo'" />
                     </div>
-                    <div>
+                    <div class="app-title-section">
                         <h1 class="text-xl font-semibold text-gray-900">{{ config.appName }}</h1>
                         <span class="text-xs text-gray-500">v{{ config.version }}</span>
                     </div>
@@ -241,12 +241,13 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
     </header>
 
     <!-- Main Content -->
-    <div class="max-w-7xl mx-auto px-4 py-6">
+    <div id="main-container" class="main-container max-w-7xl mx-auto px-4 py-6">
         <!-- File Upload Section -->
-        <div v-if="!jsonData" class="text-center py-12">
+        <div id="file-upload-section" v-if="!jsonData" class="file-upload-section text-center py-12">
             <div class="max-w-md mx-auto">
                 <div 
-                    class="drop-zone border-2 border-dashed border-gray-300 rounded-lg p-8 transition-colors cursor-pointer"
+                    id="file-drop-zone"
+                    class="drop-zone file-drop-zone border-2 border-dashed border-gray-300 rounded-lg p-8 transition-colors cursor-pointer"
                     :class="{ 'drag-over': isDragOver }"
                     @click="$refs.fileInput.click()"
                     @dragover.prevent="handleDragOver"
@@ -257,7 +258,7 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                         <div class="logo-container mx-auto mb-4" style="width: 48px; height: 48px;">
                             <img :src="config.logoUrl" :alt="config.appName + ' Logo'" />
                         </div>
-                        <div v-if="!isDragOver">
+                        <div v-if="!isDragOver" class="upload-instructions">
                             <h3 class="text-lg font-medium text-gray-900 mb-2">Load JSON File</h3>
                             <p class="text-gray-600 mb-4">Drag and drop a JSON file here, or click to select</p>
                             <div class="flex items-center justify-center space-x-2 mb-4">
@@ -265,7 +266,7 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                                 <span class="text-sm text-gray-500">Supports .json files</span>
                             </div>
                         </div>
-                        <div v-else>
+                        <div v-else class="drop-active-state">
                             <h3 class="text-lg font-medium text-black mb-2">Drop your JSON file here</h3>
                             <p class="text-gray-700 mb-4">Release to upload the file</p>
                             <i data-lucide="file-plus" class="w-8 h-8 mx-auto text-black"></i>
@@ -281,18 +282,20 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                         
                         <button 
                             v-if="!isDragOver"
-                            class="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors inline-flex items-center space-x-2"
+                            id="choose-file-btn"
+                            class="choose-file-btn px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors inline-flex items-center space-x-2"
                             @click.stop="$refs.fileInput.click()"
                         >
                             <i data-lucide="folder-open" class="w-4 h-4"></i>
                             <span>Choose File</span>
                         </button>
                         
-                        <div v-if="config.defaultFile && !isDragOver" class="mt-6 pt-4 border-t border-gray-200">
+                        <div v-if="config.defaultFile && !isDragOver" class="default-file-section mt-6 pt-4 border-t border-gray-200">
                             <p class="text-sm text-gray-500 mb-2">or</p>
                             <button 
+                                id="load-default-btn"
                                 @click.stop="loadDefaultFile"
-                                class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm inline-flex items-center space-x-2"
+                                class="load-default-btn px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm inline-flex items-center space-x-2"
                             >
                                 <i data-lucide="download-cloud" class="w-4 h-4"></i>
                                 <span>Load Default File</span>
@@ -302,7 +305,7 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                 </div>
                 
                 <!-- File Format Help -->
-                <div class="mt-6 text-left bg-gray-50 rounded-lg p-4">
+                <div id="file-format-help" class="file-format-help mt-6 text-left bg-gray-50 rounded-lg p-4">
                     <h4 class="text-sm font-medium text-gray-900 mb-2 flex items-center">
                         <i data-lucide="info" class="w-4 h-4 mr-2"></i>
                         Supported Format
@@ -319,25 +322,26 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
         </div>
 
         <!-- Explorer Interface -->
-        <div v-else :class="config.showSidebar ? 'grid grid-cols-1 lg:grid-cols-3 gap-6' : 'grid grid-cols-1 gap-6'">
+        <div id="explorer-interface" v-else class="explorer-interface" :class="config.showSidebar ? 'grid grid-cols-1 lg:grid-cols-3 gap-6' : 'grid grid-cols-1 gap-6'">
             <!-- Tree Navigation -->
-            <div v-if="config.showSidebar" class="lg:col-span-1 bg-white rounded-lg border border-gray-200 overflow-hidden">
-                <div class="p-4 border-b border-gray-200 bg-gray-50">
+            <div id="navigation-section" v-if="config.showSidebar" class="navigation-section lg:col-span-1 bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div id="navigation-header" class="navigation-header p-4 border-b border-gray-200 bg-gray-50">
                     <div class="flex items-center justify-between">
                         <h2 class="font-medium text-gray-900 flex items-center space-x-2">
                             <i data-lucide="folder-tree" class="w-4 h-4"></i>
                             <span>Data Structure</span>
                         </h2>
                         <button 
+                            id="reset-data-btn"
                             @click="resetData"
-                            class="text-sm text-gray-500 hover:text-gray-700 flex items-center space-x-1"
+                            class="reset-data-btn text-sm text-gray-500 hover:text-gray-700 flex items-center space-x-1"
                         >
                             <i data-lucide="refresh-cw" class="w-3 h-3"></i>
                             <span>New File</span>
                         </button>
                     </div>
                 </div>
-                <div class="p-4 overflow-y-auto h-full">
+                <div id="data-structure-tree" class="data-structure-tree p-4 overflow-y-auto h-full">
                     <tree-node 
                         :node="jsonData" 
                         :path="[]" 
@@ -349,11 +353,11 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
             </div>
 
             <!-- Content Viewer -->
-            <div :class="config.showSidebar ? 'lg:col-span-2' : 'col-span-1'" class="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                <div class="p-4 border-b border-gray-200 bg-gray-50">
-    <div v-if="selectedNode">
+            <div id="node-visualization" :class="config.showSidebar ? 'lg:col-span-2' : 'col-span-1'" class="node-visualization bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div id="node-header" class="node-header p-4 border-b border-gray-200 bg-gray-50">
+    <div v-if="selectedNode" class="node-header-content">
         <!-- Breadcrumbs -->
-        <nav class="flex flex-wrap items-center text-xs text-gray-500 mb-2">
+        <nav id="breadcrumb-nav" class="breadcrumb-nav flex flex-wrap items-center text-xs text-gray-500 mb-2">
             <span class="breadcrumb-arrow">Home</span>
             <span 
                 v-for="(crumb, index) in breadcrumbs" 
@@ -369,7 +373,7 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
         
         <!-- Module Type and Title -->
         <div class="flex items-center justify-between mb-2">
-            <h2 class="text-lg font-semibold text-gray-900">
+            <h2 id="node-title" class="node-title text-lg font-semibold text-gray-900">
                 {{ getNodeTitle() }}
                 <span v-if="nodeCaption" class="text-sm font-normal text-gray-500">
                     ({{ nodeCaption }})
@@ -377,19 +381,21 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
             </h2>
             
             <!-- Export Icons -->
-            <div class="flex items-center space-x-2">
+            <div id="export-controls" class="export-controls flex items-center space-x-2">
                 <button 
+                    id="export-markdown-btn"
                     @click="exportCurrentNode('markdown')"
                     :disabled="!selectedNode"
-                    class="p-2 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="export-btn export-markdown-btn p-2 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Export Markdown"
                 >
                     <i data-lucide="download" class="w-4 h-4"></i>
                 </button>
                 <button 
+                    id="export-html-btn"
                     @click="exportCurrentNode('html')"
                     :disabled="!selectedNode"
-                    class="p-2 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="export-btn export-html-btn p-2 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Export HTML"
                 >
                     <i data-lucide="code" class="w-4 h-4"></i>
@@ -398,29 +404,29 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
         </div>
         
         <!-- Compact Metadata Row -->
-        <div class="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+        <div id="node-metadata" class="node-metadata flex flex-wrap items-center gap-4 text-xs text-gray-500">
             <!-- Object Type -->
-            <span class="flex items-center">
+            <span class="node-type flex items-center">
                 <i :data-lucide="getNodeIcon()" class="w-3 h-3 mr-1"></i>
                 {{ getNodeType() }}
             </span>
             
             <!-- Property Count -->
-            <span v-if="isObject || isArray">
+            <span v-if="isObject || isArray" class="property-count">
                 {{ getPropertyCount() }} {{ isArray ? 'items' : 'properties' }}
             </span>
             
             <!-- ID -->
-            <span v-if="getNodeId()" class="font-mono bg-gray-100 px-2 py-0.5 rounded">
+            <span v-if="getNodeId()" class="node-id font-mono bg-gray-100 px-2 py-0.5 rounded">
                 id: {{ getNodeId() }}
             </span>
             
             <!-- Tags -->
-            <div v-if="getNodeTags().length > 0" class="flex flex-wrap gap-1">
+            <div v-if="getNodeTags().length > 0" class="node-tags flex flex-wrap gap-1">
                 <span 
                     v-for="tag in getNodeTags().slice(0, 3)" 
                     :key="tag.full"
-                    :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs', getTagClass(tag)]"
+                    :class="['tag-item inline-flex items-center px-2 py-0.5 rounded-full text-xs', getTagClass(tag)]"
                 >
                     <span v-if="tag.type === 'relation'">
                         {{ tag.relationType }}»{{ tag.target }}
@@ -439,7 +445,7 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
         Select an item from the tree to view its content
     </div>
 </div>
-                <div class="p-6 overflow-y-auto h-full">
+                <div id="node-content" class="node-content p-6 overflow-y-auto h-full">
                     <div v-if="selectedNode">
                         <content-viewer 
                             :node="selectedNode" 
@@ -448,7 +454,7 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                             @navigate-relation="navigateToRelation"
                         ></content-viewer>
                     </div>
-                    <div v-else class="text-center py-12 text-gray-500">
+                    <div v-else class="empty-state text-center py-12 text-gray-500">
                         <i data-lucide="mouse-pointer-click" class="w-12 h-12 mx-auto mb-4 text-gray-300"></i>
                         <p>Click on any item in the tree to view its detailed information</p>
                     </div>
@@ -458,7 +464,7 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
     </div>
 
     <!-- Footer -->
-    <footer v-if="config.showFooter" class="bg-gray-50 border-t border-gray-200 mt-8">
+    <footer id="main-footer" v-if="config.showFooter" class="app-footer bg-gray-50 border-t border-gray-200 mt-8">
         <div class="max-w-7xl mx-auto px-4 py-6">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-3">
@@ -477,6 +483,17 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
 
 <script>
     const { createApp } = Vue;
+
+    // Utility function to sanitize strings for CSS class names
+    function sanitizeForClass(str) {
+        if (!str) return '';
+        return String(str)
+            .toLowerCase()
+            .replace(/[^a-z0-9\-_]/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .replace(/-+/g, '-')
+            .substring(0, 50); // Limit length
+    }
 
     // Tree Node Component
     const TreeNode = {
@@ -526,18 +543,35 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                 return this.path[this.path.length - 1];
             },
             displayNameWithCount() {
-    let name = this.displayName;
-    
-    // Add item count for arrays and objects
-    if (this.isArray) {
-        name += ` (${this.node.length})`;
-    } else if (this.isObject) {
-        name += ` (${Object.keys(this.node).length})`;
-    }
-    
-    return name;
-}
-            ,
+                let name = this.displayName;
+                
+                // Add item count for arrays and objects
+                if (this.isArray) {
+                    name += ` (${this.node.length})`;
+                } else if (this.isObject) {
+                    name += ` (${Object.keys(this.node).length})`;
+                }
+                
+                return name;
+            },
+            nodeClasses() {
+                const classes = ['tree-node-item'];
+                
+                // Add semantic classes based on node content
+                if (this.isObject && this.node) {
+                    if (this.node.id) classes.push(`node-id-${sanitizeForClass(this.node.id)}`);
+                    if (this.node.name) classes.push(`node-name-${sanitizeForClass(this.node.name)}`);
+                    if (this.node.title) classes.push(`node-title-${sanitizeForClass(this.node.title)}`);
+                    if (this.nodeCaption) classes.push(`node-caption-${sanitizeForClass(this.nodeCaption)}`);
+                }
+                
+                // Add type classes
+                if (this.isArray) classes.push('node-type-array');
+                else if (this.isObject) classes.push('node-type-object');
+                else classes.push(`node-type-${typeof this.node}`);
+                
+                return classes.join(' ');
+            },
             childNodes() {
                 if (!this.hasChildren) return [];
                 
@@ -644,7 +678,7 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
             }
         },
         template: `
-            <div v-if="hasNonLeafChildren || path.length === 0">
+            <div v-if="hasNonLeafChildren || path.length === 0" :class="nodeClasses">
                 <div 
                     class="tree-node flex items-center py-2 px-2 rounded cursor-pointer"
                     :class="{ 'bg-gray-100 border-l-4 border-black': isSelected }"
@@ -654,30 +688,30 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                     <button 
                         v-if="hasChildren"
                         @click.stop="toggle"
-                        class="mr-2 p-1 hover:bg-gray-200 rounded"
+                        class="tree-node-toggle mr-2 p-1 hover:bg-gray-200 rounded"
                     >
                         <i :data-lucide="expanded ? 'chevron-down' : 'chevron-right'" class="w-3 h-3"></i>
                     </button>
                     <div v-else class="w-6"></div>
                     
-                    <i :data-lucide="nodeIcon" class="w-4 h-4 mr-2 text-gray-500"></i>
+                    <i :data-lucide="nodeIcon" class="tree-node-icon w-4 h-4 mr-2 text-gray-500"></i>
                     
-                    <div class="flex-1 min-w-0">
+                    <div class="tree-node-content flex-1 min-w-0">
                         <div class="flex items-center space-x-2">
-                            <span class="font-medium text-sm text-gray-900 truncate">
+                            <span class="tree-node-name font-medium text-sm text-gray-900 truncate">
                                 {{ displayNameWithCount }}
                             </span>
-                            <span v-if="nodeCaption" class="text-xs text-gray-500 truncate">
+                            <span v-if="nodeCaption" class="tree-node-caption text-xs text-gray-500 truncate">
                                 ({{ nodeCaption }})
                             </span>
                         </div>
-                        <div v-if="!hasChildren" class="text-xs text-gray-500 truncate">
+                        <div v-if="!hasChildren" class="tree-node-preview text-xs text-gray-500 truncate">
                             {{ getNodePreview() }}
                         </div>
                     </div>
                 </div>
                 
-                <div v-if="hasChildren && expanded">
+                <div v-if="hasChildren && expanded" class="tree-node-children">
                     <div v-for="child in childNodes" :key="child.key" :class="{ 'array-item': child.isArrayItem }">
                         <tree-node
                             :node="child.value"
@@ -717,6 +751,26 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                 if (typeof this.node === 'number') return 'Number';
                 if (typeof this.node === 'boolean') return 'Boolean';
                 return 'Unknown';
+            },
+            contentClasses() {
+                const classes = ['content-viewer'];
+                
+                // Add semantic classes based on node content
+                if (this.isObject && this.node) {
+                    if (this.node.id) classes.push(`content-id-${sanitizeForClass(this.node.id)}`);
+                    if (this.node.name) classes.push(`content-name-${sanitizeForClass(this.node.name)}`);
+                    if (this.node.title) classes.push(`content-title-${sanitizeForClass(this.node.title)}`);
+                    
+                    const caption = this.findNodeCaption(this.node);
+                    if (caption) classes.push(`content-caption-${sanitizeForClass(caption)}`);
+                }
+                
+                // Add type classes
+                if (this.isArray) classes.push('content-type-array');
+                else if (this.isObject) classes.push('content-type-object');
+                else classes.push(`content-type-${typeof this.node}`);
+                
+                return classes.join(' ');
             },
             specialFields() {
                 if (!this.isObject) return {};
@@ -876,21 +930,21 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
             renderSpecialField(field) {
                 switch (field.type) {
                     case 'id':
-                        return `<span class="field-id">${field.value}</span>`;
+                        return `<span class="field-id data-field-id">${field.value}</span>`;
                     case 'heading':
-                        return `<h3 class="field-heading text-xl font-semibold text-gray-900">${field.value}</h3>`;
+                        return `<h3 class="field-heading data-field-heading text-xl font-semibold text-gray-900">${field.value}</h3>`;
                     case 'markdown':
-                        return `<div class="markdown-content">${marked.parse(field.value)}</div>`;
+                        return `<div class="markdown-content data-field-markdown">${marked.parse(field.value)}</div>`;
                     case 'content':
-                        return `<div class="whitespace-pre-wrap">${field.value}</div>`;
+                        return `<div class="data-field-content whitespace-pre-wrap">${field.value}</div>`;
                     case 'date':
-                        return `<div class="flex items-center space-x-2">
+                        return `<div class="data-field-date flex items-center space-x-2">
                             <i data-lucide="calendar" class="w-4 h-4 text-gray-500"></i>
                             <span>${this.formatDate(field.value)}</span>
                             <span class="text-xs text-gray-500">(${field.value})</span>
                         </div>`;
                     case 'number':
-                        return `<div class="flex items-center space-x-2">
+                        return `<div class="data-field-number flex items-center space-x-2">
                             <i data-lucide="hash" class="w-4 h-4 text-gray-500"></i>
                             <span class="font-mono">${this.formatNumber(field.value)}</span>
                         </div>`;
@@ -899,14 +953,31 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                         return tags.map(tag => {
                             const tagClass = this.getTagClass(tag);
                             if (tag.type === 'relation') {
-                                return `<span class="tag ${tagClass}" style="cursor: pointer;">${tag.relationType} » ${tag.target}</span>`;
+                                return `<span class="tag data-tag data-tag-relation ${tagClass}" style="cursor: pointer;">${tag.relationType} » ${tag.target}</span>`;
                             } else {
-                                return `<span class="tag ${tagClass}">${tag.type}::${tag.value}</span>`;
+                                return `<span class="tag data-tag data-tag-${tag.type} ${tagClass}">${tag.type}::${tag.value}</span>`;
                             }
                         }).join('');
                     default:
                         return String(field.value);
                 }
+            },
+            getSubItemClasses(branch) {
+                const classes = ['sub-item-card'];
+                
+                // Add semantic classes based on item content
+                if (branch.value && typeof branch.value === 'object') {
+                    if (branch.value.id) classes.push(`sub-item-id-${sanitizeForClass(branch.value.id)}`);
+                    if (branch.value.name) classes.push(`sub-item-name-${sanitizeForClass(branch.value.name)}`);
+                    if (branch.value.title) classes.push(`sub-item-title-${sanitizeForClass(branch.value.title)}`);
+                    if (branch.caption) classes.push(`sub-item-caption-${sanitizeForClass(branch.caption)}`);
+                }
+                
+                // Add type classes
+                if (Array.isArray(branch.value)) classes.push('sub-item-type-array');
+                else if (typeof branch.value === 'object') classes.push('sub-item-type-object');
+                
+                return classes.join(' ');
             },
             isDate(str) {
                 return !isNaN(Date.parse(str)) && /\d{4}-\d{2}-\d{2}/.test(str);
@@ -1050,45 +1121,45 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
             }
         },
         template: `
-            <div class="space-y-6">
+            <div :class="contentClasses" class="space-y-6">
                 <!-- Special Fields Rendering -->
-                <div v-if="isObject" class="space-y-4">
+                <div v-if="isObject" class="special-fields space-y-4">
                     <template v-for="(field, key) in specialFields" :key="key">
                         <!-- ID Field (discrete) -->
-                        <div v-if="field.type === 'id'" class="flex items-center space-x-2">
+                        <div v-if="field.type === 'id'" class="field-container field-id-container flex items-center space-x-2">
                             <span class="text-sm text-gray-600">{{ field.key }}:</span>
                             <span v-html="renderSpecialField(field)"></span>
                         </div>
                         
                         <!-- Heading Field -->
-                        <div v-else-if="field.type === 'heading'" v-html="renderSpecialField(field)"></div>
+                        <div v-else-if="field.type === 'heading'" class="field-container field-heading-container" v-html="renderSpecialField(field)"></div>
                         
                         <!-- Markdown Content -->
-                        <div v-else-if="field.type === 'markdown'" class="space-y-2">
+                        <div v-else-if="field.type === 'markdown'" class="field-container field-markdown-container space-y-2">
                             <h4 class="text-sm font-medium text-gray-700">{{ field.key }}</h4>
                             <div v-html="renderSpecialField(field)"></div>
                         </div>
                         
                         <!-- Regular Content -->
-                        <div v-else-if="field.type === 'content'" class="space-y-2">
+                        <div v-else-if="field.type === 'content'" class="field-container field-content-container space-y-2">
                             <h4 class="text-sm font-medium text-gray-700">{{ field.key }}</h4>
                             <div v-html="renderSpecialField(field)"></div>
                         </div>
                         
                         <!-- Date Field (compact) -->
-                        <div v-else-if="field.type === 'date'" class="field-compact">
+                        <div v-else-if="field.type === 'date'" class="field-container field-date-container field-compact">
                             <span class="field-label">{{ field.key }}:</span>
                             <div v-html="renderSpecialField(field)"></div>
                         </div>
                         
                         <!-- Number Field (compact) -->
-                        <div v-else-if="field.type === 'number'" class="field-compact">
+                        <div v-else-if="field.type === 'number'" class="field-container field-number-container field-compact">
                             <span class="field-label">{{ field.key }}:</span>
                             <div v-html="renderSpecialField(field)"></div>
                         </div>
                         
                         <!-- Tags Field -->
-                        <div v-else-if="field.type === 'tags'" class="space-y-2">
+                        <div v-else-if="field.type === 'tags'" class="field-container field-tags-container space-y-2">
                             <h4 class="text-sm font-medium text-gray-700">{{ field.key }}</h4>
                             <div class="flex flex-wrap gap-2" v-html="renderSpecialField(field)"></div>
                         </div>
@@ -1096,13 +1167,12 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                 </div>
 
                 <!-- Normal Fields Section -->
-                <div v-if="normalFields.length > 0" class="space-y-4">
+                <div v-if="normalFields.length > 0" class="normal-fields space-y-4">
                     <h3 v-if="Object.keys(specialFields).length > 0" class="text-md font-medium text-gray-900">Other Properties</h3>
-                    <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="normal-fields-container bg-gray-50 rounded-lg p-4">
                         <div class="space-y-3">
                             <div v-for="(field, index) in normalFields" :key="index" 
-                                 class="field-compact"
-                                 :class="{ 'array-item': isArray }">
+                                 :class="['data-field', 'data-field-' + sanitizeForClass(field.key), 'field-compact', { 'array-item': isArray }]">
                                 <span class="field-label">{{ field.displayName }}:</span>
                                 <div class="field-value">
                                     <!-- String Content -->
@@ -1127,12 +1197,11 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                 </div>
 
                 <!-- Non-Leaf Nodes Section -->
-                <div v-if="nonLeafNodes.length > 0" class="space-y-4">
+                <div v-if="nonLeafNodes.length > 0" class="sub-items-section space-y-4">
                     <h3 class="text-md font-medium text-gray-900">Sub-items</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="sub-items-grid grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div v-for="(branch, index) in nonLeafNodes" :key="index" 
-                             class="bg-white p-4 rounded border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer"
-                             :class="{ 'array-item': branch.isArrayItem }"
+                             :class="[getSubItemClasses(branch), 'bg-white p-4 rounded border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer', { 'array-item': branch.isArrayItem }]"
                              @click="navigateToChild(branch)">
                             <div class="flex items-center space-x-2 mb-2">
                                 <i :data-lucide="Array.isArray(branch.value) ? 'folder' : 'folder'" class="w-5 h-5 text-gray-700"></i>
@@ -1146,11 +1215,11 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                 </div>
                 
                 <!-- Primitive Value Display -->
-                <div v-if="!isObject && !isArray" class="bg-gray-50 rounded-lg p-4">
+                <div v-if="!isObject && !isArray" class="primitive-value bg-gray-50 rounded-lg p-4">
                     <!-- String Content -->
-                    <div v-if="typeof node === 'string'">
+                    <div v-if="typeof node === 'string'" class="primitive-string">
                         <!-- Date -->
-                        <div v-if="isDate(node)" class="flex items-center space-x-3">
+                        <div v-if="isDate(node)" class="primitive-date flex items-center space-x-3">
                             <i data-lucide="calendar" class="w-5 h-5 text-gray-700"></i>
                             <div>
                                 <div class="font-medium">{{ formatDate(node) }}</div>
@@ -1159,35 +1228,35 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
                         </div>
                         
                         <!-- Email -->
-                        <div v-else-if="isEmail(node)" class="flex items-center space-x-3">
+                        <div v-else-if="isEmail(node)" class="primitive-email flex items-center space-x-3">
                             <i data-lucide="mail" class="w-5 h-5 text-gray-700"></i>
                             <a :href="'mailto:' + node" class="text-gray-900 hover:underline">{{ node }}</a>
                         </div>
                         
                         <!-- URL -->
-                        <div v-else-if="isUrl(node)" class="flex items-center space-x-3">
+                        <div v-else-if="isUrl(node)" class="primitive-url flex items-center space-x-3">
                             <i data-lucide="external-link" class="w-5 h-5 text-gray-700"></i>
                             <a :href="node" target="_blank" class="text-gray-900 hover:underline">{{ node }}</a>
                         </div>
                         
                         <!-- Markdown -->
-                        <div v-else-if="isMarkdown(node)" class="markdown-content" v-html="marked.parse(node)"></div>
+                        <div v-else-if="isMarkdown(node)" class="primitive-markdown markdown-content" v-html="marked.parse(node)"></div>
                         
                         <!-- Regular Text -->
-                        <div v-else class="flex items-start space-x-3">
+                        <div v-else class="primitive-text flex items-start space-x-3">
                             <i data-lucide="type" class="w-5 h-5 text-gray-500 mt-0.5"></i>
                             <div class="whitespace-pre-wrap">{{ node }}</div>
                         </div>
                     </div>
 
                     <!-- Number Content -->
-                    <div v-else-if="typeof node === 'number'" class="flex items-center space-x-3">
+                    <div v-else-if="typeof node === 'number'" class="primitive-number flex items-center space-x-3">
                         <i data-lucide="hash" class="w-5 h-5 text-gray-700"></i>
                         <div class="text-2xl font-mono">{{ formatNumber(node) }}</div>
                     </div>
 
                     <!-- Boolean Content -->
-                    <div v-else-if="typeof node === 'boolean'" class="flex items-center space-x-3">
+                    <div v-else-if="typeof node === 'boolean'" class="primitive-boolean flex items-center space-x-3">
                         <i :data-lucide="node ? 'check-circle' : 'x-circle'" 
                            class="w-5 h-5 text-gray-700"></i>
                         <div class="text-lg font-medium">
@@ -1232,6 +1301,7 @@ if (urlParams.get('version')) APP_CONFIG.version = urlParams.get('version');
             }
         },
         methods: {
+            sanitizeForClass,
             getNodeType() {
                 if (Array.isArray(this.selectedNode)) return 'Array';
                 if (typeof this.selectedNode === 'object' && this.selectedNode !== null) return 'Object';
